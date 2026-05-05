@@ -150,7 +150,7 @@ function SnapshotTile({ url, label, sub, icon: Icon }: {
         </div>
       </div>
       {expanded && url && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
           onClick={() => setExpanded(false)}>
           <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
             <button onClick={() => setExpanded(false)}
@@ -195,8 +195,25 @@ function WeighingDrawer({ weighing, onClose }: { weighing: Weighing; onClose: ()
 
   return (
     <>
+      <style>{`
+        .weighing-drawer {
+          width: 460px;
+        }
+        @media (max-width: 639px) {
+          .weighing-drawer {
+            width: 100%;
+            top: auto;
+            bottom: 0;
+            height: 90%;
+            border-radius: 16px 16px 0 0;
+          }
+        }
+        @media (min-width: 640px) and (max-width: 767px) {
+          .weighing-drawer { width: 100%; }
+        }
+      `}</style>
       <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-[460px] bg-white z-50 shadow-2xl flex flex-col">
+      <div className="weighing-drawer fixed right-0 top-0 h-full bg-white z-50 shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
           <div>
             <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-0.5">Record Details</p>
@@ -338,8 +355,25 @@ function DismissedDrawer({ row, onClose }: { row: DismissedRow; onClose: () => v
 
   return (
     <>
+      <style>{`
+        .dismissed-drawer {
+          width: 460px;
+        }
+        @media (max-width: 639px) {
+          .dismissed-drawer {
+            width: 100%;
+            top: auto;
+            bottom: 0;
+            height: 90%;
+            border-radius: 16px 16px 0 0;
+          }
+        }
+        @media (min-width: 640px) and (max-width: 767px) {
+          .dismissed-drawer { width: 100%; }
+        }
+      `}</style>
       <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-[460px] bg-white z-50 shadow-2xl flex flex-col">
+      <div className="dismissed-drawer fixed right-0 top-0 h-full bg-white z-50 shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
           <div>
             <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-0.5">Dismissed Record</p>
@@ -526,293 +560,394 @@ export default function WeighbridgePage() {
   const isDismissedView = status === "dismissed";
 
   return (
-    <div className="h-full flex flex-col bg-[#f4f6f9] overflow-hidden">
+    <>
+      {/* ── Responsive overrides ─────────────────────────── */}
+      <style>{`
+        /* Stat cards: 2-col on mobile, 3-col on sm, 5-col on lg */
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+        }
+        @media (min-width: 640px)  { .stat-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (min-width: 1024px) { .stat-grid { grid-template-columns: repeat(5, 1fr); } }
 
-      {/* Top bar */}
-      <div className="shrink-0 bg-white border-b border-slate-100 px-6 py-3 flex items-center justify-between z-20">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center">
-            <Scale size={14} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-slate-900 leading-none">Weighbridge Records</h1>
-            <p className="text-[10px] text-slate-400 mt-0.5">{total.toLocaleString()} records</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={fetchRows} disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 border border-slate-200 transition-all">
-            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          <button onClick={() => exportToCSV(rows)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-sm">
-            <Download size={12} />
-            Export CSV
-          </button>
-        </div>
-      </div>
+        /* Status pill tabs: scroll on mobile */
+        .status-tabs {
+          display: flex;
+          align-items: center;
+          background: #f1f5f9;
+          border-radius: 8px;
+          padding: 2px;
+          gap: 2px;
+          overflow-x: auto;
+          flex-shrink: 0;
+          scrollbar-width: none;
+        }
+        .status-tabs::-webkit-scrollbar { display: none; }
 
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" }}>
+        /* Filter row: wrap on small screens */
+        .filter-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+        }
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-5 gap-3">
-          {[
-            { icon: Hash,          label: "Total",     value: stats.total,     color: "bg-slate-700" },
-            { icon: Clock,         label: "Waiting",   value: stats.waiting,   color: "bg-amber-500" },
-            { icon: CheckCircle2,  label: "Complete",  value: stats.complete,  color: "bg-emerald-500" },
-            { icon: AlertTriangle, label: "Flagged",   value: stats.flagged,   color: "bg-red-500" },
-            { icon: Ban,           label: "Dismissed", value: stats.dismissed, color: "bg-slate-500" },
-          ].map(({ icon: Icon, label, value, color }) => (
-            <div key={label} className="bg-white rounded-xl border border-slate-100 px-3.5 py-3 flex items-center gap-3 shadow-sm">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
-                <Icon size={15} className="text-white" />
+        /* Search: full width on mobile */
+        .search-box {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 6px 10px;
+          flex: 1;
+          min-width: 140px;
+        }
+
+        /* Top bar: stack on very small screens */
+        .topbar-inner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        @media (max-width: 479px) {
+          .topbar-inner { flex-wrap: wrap; }
+          .topbar-actions { width: 100%; justify-content: flex-end; }
+        }
+
+        /* Operator select: hide label on mobile */
+        @media (max-width: 479px) {
+          .op-select-wrap { display: none; }
+        }
+
+        /* Pagination: hide first/last on mobile */
+        @media (max-width: 479px) {
+          .pag-first-last { display: none; }
+          .pag-info { font-size: 10px; }
+        }
+
+        /* Page content padding */
+        .page-content {
+          padding: 16px 24px;
+        }
+        @media (max-width: 639px) {
+          .page-content { padding: 12px; }
+        }
+
+        /* Top bar padding */
+        .topbar-pad {
+          padding: 12px 24px;
+        }
+        @media (max-width: 639px) {
+          .topbar-pad { padding: 10px 12px; }
+        }
+      `}</style>
+
+      <div className="h-full flex flex-col bg-[#f4f6f9] overflow-hidden">
+
+        {/* Top bar */}
+        <div className="topbar-pad shrink-0 bg-white border-b border-slate-100 z-20">
+          <div className="topbar-inner">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
+                <Scale size={14} className="text-white" />
               </div>
               <div>
-                <p className="text-lg font-bold text-slate-900 tabular-nums leading-none">{value.toLocaleString()}</p>
-                <p className="text-[10px] text-slate-400 font-medium mt-0.5">{label}</p>
+                <h1 className="text-sm font-bold text-slate-900 leading-none">Weighbridge Records</h1>
+                <p className="text-[10px] text-slate-400 mt-0.5">{total.toLocaleString()} records</p>
               </div>
             </div>
-          ))}
+            <div className="topbar-actions flex items-center gap-2">
+              <button onClick={fetchRows} disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 border border-slate-200 transition-all">
+                <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+              <button onClick={() => exportToCSV(rows)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-sm">
+                <Download size={12} />
+                <span className="hidden sm:inline">Export CSV</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm px-3.5 py-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
-              {(["all", "waiting", "complete", "flagged", "dismissed"] as Status[]).map(s => (
-                <button key={s} onClick={() => setStatus(s)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all capitalize ${
-                    status === s ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                  }`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 flex-1 min-w-[160px]">
-              <Search size={12} className="text-slate-400 shrink-0" />
-              <input type="text"
-                placeholder={isDismissedView ? "Search plate OCR…" : "Search plate…"}
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                className="bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none w-full" />
-              {searchInput && (
-                <button onClick={() => setSearchInput("")}>
-                  <X size={11} className="text-slate-400 hover:text-slate-600" />
-                </button>
-              )}
-            </div>
-            {/* Operator filter hidden for dismissed view */}
-            {!isDismissedView && (
-              <select value={operatorFilter} onChange={e => setOperatorFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 outline-none cursor-pointer">
-                <option value="all">All Operators</option>
-                {operators.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
-              </select>
-            )}
-            <div className="relative">
-              <button onClick={() => setShowDateRange(!showDateRange)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  dateFrom || dateTo
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}>
-                <Calendar size={12} />
-                Date Range
-                {(dateFrom || dateTo) && <span className="w-1 h-1 rounded-full bg-amber-400" />}
-              </button>
-              {showDateRange && (
-                <div className="absolute right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl p-3 z-20 w-60">
-                  <div className="space-y-2">
-                    {[{ lbl: "From", val: dateFrom, set: setDateFrom },
-                      { lbl: "To",   val: dateTo,   set: setDateTo   }].map(({ lbl, val, set }) => (
-                      <div key={lbl}>
-                        <label className="text-[10px] font-semibold text-slate-500 mb-1 block">{lbl}</label>
-                        <input type="date" value={val} onChange={e => set(e.target.value)}
-                          className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none" />
-                      </div>
-                    ))}
-                    <div className="flex gap-1.5 pt-1">
-                      <button onClick={() => { setDateFrom(""); setDateTo(""); setShowDateRange(false); }}
-                        className="flex-1 py-1.5 text-[10px] font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
-                        Clear
-                      </button>
-                      <button onClick={() => setShowDateRange(false)}
-                        className="flex-1 py-1.5 text-[10px] font-semibold text-white bg-slate-900 rounded-lg">
-                        Apply
-                      </button>
-                    </div>
-                  </div>
+        <div className="flex-1 overflow-y-auto page-content space-y-3"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" }}>
+
+          {/* Stat cards */}
+          <div className="stat-grid">
+            {[
+              { icon: Hash,          label: "Total",     value: stats.total,     color: "bg-slate-700" },
+              { icon: Clock,         label: "Waiting",   value: stats.waiting,   color: "bg-amber-500" },
+              { icon: CheckCircle2,  label: "Complete",  value: stats.complete,  color: "bg-emerald-500" },
+              { icon: AlertTriangle, label: "Flagged",   value: stats.flagged,   color: "bg-red-500" },
+              { icon: Ban,           label: "Dismissed", value: stats.dismissed, color: "bg-slate-500" },
+            ].map(({ icon: Icon, label, value, color }) => (
+              <div key={label} className="bg-white rounded-xl border border-slate-100 px-3.5 py-3 flex items-center gap-3 shadow-sm">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+                  <Icon size={15} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-slate-900 tabular-nums leading-none">{value.toLocaleString()}</p>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm px-3.5 py-2.5">
+            <div className="filter-row">
+              {/* Status tabs */}
+              <div className="status-tabs">
+                {(["all", "waiting", "complete", "flagged", "dismissed"] as Status[]).map(s => (
+                  <button key={s} onClick={() => setStatus(s)}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all capitalize whitespace-nowrap ${
+                      status === s ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search */}
+              <div className="search-box">
+                <Search size={12} className="text-slate-400 shrink-0" />
+                <input type="text"
+                  placeholder={isDismissedView ? "Search plate OCR…" : "Search plate…"}
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  className="bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none w-full" />
+                {searchInput && (
+                  <button onClick={() => setSearchInput("")}>
+                    <X size={11} className="text-slate-400 hover:text-slate-600" />
+                  </button>
+                )}
+              </div>
+
+              {/* Operator filter */}
+              {!isDismissedView && (
+                <div className="op-select-wrap">
+                  <select value={operatorFilter} onChange={e => setOperatorFilter(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 outline-none cursor-pointer">
+                    <option value="all">All Operators</option>
+                    {operators.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
+                  </select>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
-            <table className="w-full min-w-[720px]">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
-                  {isDismissedView
-                    ? ["Plate OCR", "Weight OCR", "Detected At", "Dismiss Reason", "Status", ""].map(h => (
-                        <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-slate-400 tracking-widest uppercase whitespace-nowrap">{h}</th>
-                      ))
-                    : ["Token", "Plate", "Operator", "Loaded kg", "Empty kg", "Net kg", "Entry Time", "Status", ""].map(h => (
-                        <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-slate-400 tracking-widest uppercase whitespace-nowrap">{h}</th>
-                      ))
-                  }
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i} className="border-b border-slate-50">
-                      {Array.from({ length: isDismissedView ? 6 : 9 }).map((_, j) => (
-                        <td key={j} className="px-4 py-2.5">
-                          <div className="h-3 bg-slate-100 rounded animate-pulse" />
-                        </td>
+              {/* Date range */}
+              <div className="relative">
+                <button onClick={() => setShowDateRange(!showDateRange)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    dateFrom || dateTo
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}>
+                  <Calendar size={12} />
+                  <span className="hidden sm:inline">Date Range</span>
+                  <span className="sm:hidden">Date</span>
+                  {(dateFrom || dateTo) && <span className="w-1 h-1 rounded-full bg-amber-400" />}
+                </button>
+                {showDateRange && (
+                  <div className="absolute right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl p-3 z-20 w-60">
+                    <div className="space-y-2">
+                      {[{ lbl: "From", val: dateFrom, set: setDateFrom },
+                        { lbl: "To",   val: dateTo,   set: setDateTo   }].map(({ lbl, val, set }) => (
+                        <div key={lbl}>
+                          <label className="text-[10px] font-semibold text-slate-500 mb-1 block">{lbl}</label>
+                          <input type="date" value={val} onChange={e => set(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none" />
+                        </div>
                       ))}
-                    </tr>
-                  ))
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={isDismissedView ? 6 : 9} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 text-slate-400">
-                        <Weight size={28} className="opacity-30" />
-                        <p className="text-xs font-medium">No records found</p>
-                        <p className="text-[10px]">Try adjusting your filters</p>
+                      <div className="flex gap-1.5 pt-1">
+                        <button onClick={() => { setDateFrom(""); setDateTo(""); setShowDateRange(false); }}
+                          className="flex-1 py-1.5 text-[10px] font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
+                          Clear
+                        </button>
+                        <button onClick={() => setShowDateRange(false)}
+                          className="flex-1 py-1.5 text-[10px] font-semibold text-white bg-slate-900 rounded-lg">
+                          Apply
+                        </button>
                       </div>
-                    </td>
-                  </tr>
-                ) : isDismissedView ? (
-                  // ── Dismissed rows ──
-                  rows.map((row, idx) => {
-                    const d = row as DismissedRow;
-                    return (
-                      <tr key={d.id} onClick={() => setSelected(d)}
-                        className={`border-b border-slate-50 transition-colors hover:bg-slate-50/60 group cursor-pointer ${idx % 2 !== 0 ? "bg-slate-50/30" : ""}`}>
-                        <td className="px-4 py-2.5">
-                          <span className="text-xs font-bold font-mono text-slate-700">
-                            {d.plate_ocr ?? <span className="text-slate-300 font-normal">—</span>}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-slate-600">
-                          {d.weight_ocr ? `${parseInt(d.weight_ocr).toLocaleString()} kg` : "—"}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-[10px] text-slate-500 whitespace-nowrap">{fmtDate(d.triggered_at)}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-xs text-slate-500 truncate max-w-[180px] block">
-                            {d.dismiss_reason ?? <span className="text-slate-300">—</span>}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5"><StatusBadge status="dismissed" /></td>
-                        <td className="px-4 py-2.5">
-                          <button onClick={e => { e.stopPropagation(); setSelected(d); }}
-                            className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all opacity-0 group-hover:opacity-100">
-                            <Eye size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  // ── Weighing rows ──
-                  rows.map((row, idx) => {
-                    const w = row as Weighing;
-                    return (
-                      <tr key={w.id} onClick={() => setSelected(w)}
-                        className={`border-b border-slate-50 transition-colors hover:bg-blue-50/30 group cursor-pointer ${idx % 2 !== 0 ? "bg-slate-50/30" : ""}`}>
-                        <td className="px-4 py-2.5">
-                          <span className="text-[10px] font-bold font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                            {w.token_number}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-xs font-bold font-mono text-slate-800">
-                            {w.plate_number ?? <span className="text-slate-300 font-normal">—</span>}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-                              <User size={10} className="text-slate-500" />
-                            </div>
-                            <span className="text-xs text-slate-600 whitespace-nowrap">{w.entry_operator?.name ?? "—"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-slate-700 tabular-nums">{fmt(w.loaded_weight)}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-slate-700 tabular-nums">{fmt(w.empty_weight)}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`text-xs font-bold font-mono tabular-nums ${w.net_load != null ? "text-emerald-600" : "text-slate-300"}`}>
-                            {fmt(w.net_load)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-[10px] text-slate-500 whitespace-nowrap">{fmtDate(w.entry_at)}</span>
-                        </td>
-                        <td className="px-4 py-2.5"><StatusBadge status={w.status} /></td>
-                        <td className="px-4 py-2.5">
-                          <button onClick={e => { e.stopPropagation(); setSelected(w); }}
-                            className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all opacity-0 group-hover:opacity-100">
-                            <Eye size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                    </div>
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {!loading && total > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-              <p className="text-[10px] text-slate-500">
-                Showing{" "}
-                <span className="font-semibold text-slate-700">
-                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
-                </span>
-                {" "}of{" "}
-                <span className="font-semibold text-slate-700">{total.toLocaleString()}</span>
-              </p>
-              <div className="flex items-center gap-1">
-                <PagBtn onClick={() => setPage(1)} disabled={page === 1}>«</PagBtn>
-                <PagBtn onClick={() => setPage(p => p - 1)} disabled={page === 1}>
-                  <ChevronLeft size={12} />
-                </PagBtn>
-                {pageNums.map((p, i) =>
-                  p === "…" ? (
-                    <span key={`e${i}`} className="w-7 text-center text-slate-400 text-xs">…</span>
-                  ) : (
-                    <button key={p} onClick={() => setPage(p as number)}
-                      className={`w-7 h-7 rounded-md text-xs font-semibold transition-all ${
-                        page === p ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                      }`}>
-                      {p}
-                    </button>
-                  )
-                )}
-                <PagBtn onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>
-                  <ChevronRight size={12} />
-                </PagBtn>
-                <PagBtn onClick={() => setPage(totalPages)} disabled={page === totalPages}>»</PagBtn>
               </div>
             </div>
-          )}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+              <table className="w-full min-w-[620px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    {isDismissedView
+                      ? ["Plate OCR", "Weight OCR", "Detected At", "Dismiss Reason", "Status", ""].map(h => (
+                          <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-slate-400 tracking-widest uppercase whitespace-nowrap">{h}</th>
+                        ))
+                      : ["Token", "Plate", "Operator", "Loaded kg", "Empty kg", "Net kg", "Entry Time", "Status", ""].map(h => (
+                          <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-slate-400 tracking-widest uppercase whitespace-nowrap">{h}</th>
+                        ))
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={i} className="border-b border-slate-50">
+                        {Array.from({ length: isDismissedView ? 6 : 9 }).map((_, j) => (
+                          <td key={j} className="px-4 py-2.5">
+                            <div className="h-3 bg-slate-100 rounded animate-pulse" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={isDismissedView ? 6 : 9} className="py-16 text-center">
+                        <div className="flex flex-col items-center gap-2 text-slate-400">
+                          <Weight size={28} className="opacity-30" />
+                          <p className="text-xs font-medium">No records found</p>
+                          <p className="text-[10px]">Try adjusting your filters</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : isDismissedView ? (
+                    rows.map((row, idx) => {
+                      const d = row as DismissedRow;
+                      return (
+                        <tr key={d.id} onClick={() => setSelected(d)}
+                          className={`border-b border-slate-50 transition-colors hover:bg-slate-50/60 group cursor-pointer ${idx % 2 !== 0 ? "bg-slate-50/30" : ""}`}>
+                          <td className="px-4 py-2.5">
+                            <span className="text-xs font-bold font-mono text-slate-700">
+                              {d.plate_ocr ?? <span className="text-slate-300 font-normal">—</span>}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-slate-600">
+                            {d.weight_ocr ? `${parseInt(d.weight_ocr).toLocaleString()} kg` : "—"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-[10px] text-slate-500 whitespace-nowrap">{fmtDate(d.triggered_at)}</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-xs text-slate-500 truncate max-w-[160px] block">
+                              {d.dismiss_reason ?? <span className="text-slate-300">—</span>}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5"><StatusBadge status="dismissed" /></td>
+                          <td className="px-4 py-2.5">
+                            <button onClick={e => { e.stopPropagation(); setSelected(d); }}
+                              className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all opacity-0 group-hover:opacity-100">
+                              <Eye size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    rows.map((row, idx) => {
+                      const w = row as Weighing;
+                      return (
+                        <tr key={w.id} onClick={() => setSelected(w)}
+                          className={`border-b border-slate-50 transition-colors hover:bg-blue-50/30 group cursor-pointer ${idx % 2 !== 0 ? "bg-slate-50/30" : ""}`}>
+                          <td className="px-4 py-2.5">
+                            <span className="text-[10px] font-bold font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {w.token_number}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-xs font-bold font-mono text-slate-800">
+                              {w.plate_number ?? <span className="text-slate-300 font-normal">—</span>}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                                <User size={10} className="text-slate-500" />
+                              </div>
+                              <span className="text-xs text-slate-600 whitespace-nowrap">{w.entry_operator?.name ?? "—"}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-slate-700 tabular-nums">{fmt(w.loaded_weight)}</td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-slate-700 tabular-nums">{fmt(w.empty_weight)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`text-xs font-bold font-mono tabular-nums ${w.net_load != null ? "text-emerald-600" : "text-slate-300"}`}>
+                              {fmt(w.net_load)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-[10px] text-slate-500 whitespace-nowrap">{fmtDate(w.entry_at)}</span>
+                          </td>
+                          <td className="px-4 py-2.5"><StatusBadge status={w.status} /></td>
+                          <td className="px-4 py-2.5">
+                            <button onClick={e => { e.stopPropagation(); setSelected(w); }}
+                              className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all opacity-0 group-hover:opacity-100">
+                              <Eye size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {!loading && total > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 gap-2 flex-wrap">
+                <p className="pag-info text-[10px] text-slate-500">
+                  Showing{" "}
+                  <span className="font-semibold text-slate-700">
+                    {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
+                  </span>
+                  {" "}of{" "}
+                  <span className="font-semibold text-slate-700">{total.toLocaleString()}</span>
+                </p>
+                <div className="flex items-center gap-1">
+                  <span className="pag-first-last">
+                    <PagBtn onClick={() => setPage(1)} disabled={page === 1}>«</PagBtn>
+                  </span>
+                  <PagBtn onClick={() => setPage(p => p - 1)} disabled={page === 1}>
+                    <ChevronLeft size={12} />
+                  </PagBtn>
+                  {pageNums.map((p, i) =>
+                    p === "…" ? (
+                      <span key={`e${i}`} className="w-7 text-center text-slate-400 text-xs">…</span>
+                    ) : (
+                      <button key={p} onClick={() => setPage(p as number)}
+                        className={`w-7 h-7 rounded-md text-xs font-semibold transition-all ${
+                          page === p ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                        }`}>
+                        {p}
+                      </button>
+                    )
+                  )}
+                  <PagBtn onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>
+                    <ChevronRight size={12} />
+                  </PagBtn>
+                  <span className="pag-first-last">
+                    <PagBtn onClick={() => setPage(totalPages)} disabled={page === totalPages}>»</PagBtn>
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="h-2" />
         </div>
 
-        <div className="h-2" />
+        {/* Drawers */}
+        {selected?._kind === "weighing"  && <WeighingDrawer  weighing={selected as Weighing}      onClose={() => setSelected(null)} />}
+        {selected?._kind === "dismissed" && <DismissedDrawer row={selected as DismissedRow} onClose={() => setSelected(null)} />}
       </div>
-
-      {/* Drawers */}
-      {selected?._kind === "weighing"  && <WeighingDrawer  weighing={selected as Weighing}      onClose={() => setSelected(null)} />}
-      {selected?._kind === "dismissed" && <DismissedDrawer row={selected as DismissedRow} onClose={() => setSelected(null)} />}
-    </div>
+    </>
   );
 }

@@ -32,37 +32,22 @@ interface Alert {
 // ── Timezone helpers ──────────────────────────────────────────
 const TZ = 'Asia/Karachi'
 
-/**
- * Returns the UTC ISO string for midnight of today (or today + offsetDays)
- * in the Asia/Karachi timezone (UTC+5).
- *
- * Strategy: get today's date string in PKT via en-CA locale (gives YYYY-MM-DD),
- * then construct that day's 00:00:00 as UTC by subtracting 5 hours.
- */
 function karachiMidnight(offsetDays = 0): string {
-  const pkDateStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ }) // "YYYY-MM-DD"
+  const pkDateStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
   const [y, m, d] = pkDateStr.split('-').map(Number)
-  // midnight PKT = (midnight PKT date) - 5h in UTC
   const utcMs = Date.UTC(y, m - 1, d + offsetDays, 0, 0, 0) - 5 * 60 * 60 * 1000
   return new Date(utcMs).toISOString()
 }
 
-/** Format any ISO string for display in Asia/Karachi timezone */
 function pkTime(iso: string, opts: Intl.DateTimeFormatOptions): string {
   return new Date(iso).toLocaleString('en-GB', { timeZone: TZ, ...opts })
 }
-
-/** HH:mm only */
 function pkTimeShort(iso: string): string {
   return pkTime(iso, { hour: '2-digit', minute: '2-digit' })
 }
-
-/** "Friday, 2 May" style */
 function pkDateLong(iso: string): string {
   return pkTime(iso, { weekday: 'long', day: 'numeric', month: 'long' })
 }
-
-/** Full date + time: "02/05/2026, 06:58:23" */
 function pkDateTimeFull(iso: string): string {
   return pkTime(iso, {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -72,8 +57,7 @@ function pkDateTimeFull(iso: string): string {
 
 // ── Other helpers ─────────────────────────────────────────────
 function siteTime(entryAt: string) {
-  const mins = Math.floor(
-    (Date.now() - new Date(entryAt).getTime()) / 60000)
+  const mins = Math.floor((Date.now() - new Date(entryAt).getTime()) / 60000)
   if (mins < 60) return `${mins}m`
   return `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
@@ -93,14 +77,10 @@ function detectorLabel(d: string) {
   } as Record<string, string>)[d] ?? d.toUpperCase().replace(/_/g, ' ')
 }
 function severityColor(s: string) {
-  return s === 'critical' ? '#DC2626'
-    : s === 'warning' ? '#D97706'
-    : '#2563EB'
+  return s === 'critical' ? '#DC2626' : s === 'warning' ? '#D97706' : '#2563EB'
 }
 function severityBg(s: string) {
-  return s === 'critical' ? '#FEF2F2'
-    : s === 'warning' ? '#FFFBEB'
-    : '#EFF6FF'
+  return s === 'critical' ? '#FEF2F2' : s === 'warning' ? '#FFFBEB' : '#EFF6FF'
 }
 function cameraLabel(c: string) {
   return ({
@@ -118,7 +98,7 @@ function StatCardUI({ label, value, delta }: StatCard) {
     <div style={{
       background: 'white', borderRadius: 10,
       border: '1px solid #E2E8F0', padding: '20px 24px',
-      flex: 1,
+      flex: 1, minWidth: 0,
     }}>
       <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em',
                     color: '#94A3B8', marginBottom: 10 }}>
@@ -162,11 +142,9 @@ export default function OverviewPage() {
   const fetchAll = useCallback(async () => {
     const supabase = getClient()
 
-    // ── Karachi-aware day boundaries ──────────────────────────
-    const todayISO = karachiMidnight(0)   // midnight today PKT expressed in UTC
-    const ydayISO  = karachiMidnight(-1)  // midnight yesterday PKT expressed in UTC
+    const todayISO = karachiMidnight(0)
+    const ydayISO  = karachiMidnight(-1)
 
-    // ── Today's weighing stats ────────────────────────────────
     const { data: todayW } = await supabase
       .from('weighings')
       .select('id, status, entry_at')
@@ -177,30 +155,24 @@ export default function OverviewPage() {
     const completed = todayW?.filter(w => w.status === 'complete').length  ?? 0
     const flagged   = todayW?.filter(w => w.status === 'flagged').length   ?? 0
 
-    // ── Yesterday for delta ───────────────────────────────────
     const { data: yestW } = await supabase
       .from('weighings')
       .select('id, status')
       .gte('entry_at', ydayISO)
       .lt('entry_at', todayISO)
 
-    const yTotal   = yestW?.length ?? 0
-    const ySite    = yestW?.filter(w => w.status === 'waiting').length  ?? 0
-    const yComp    = yestW?.filter(w => w.status === 'complete').length ?? 0
-    const yFlag    = yestW?.filter(w => w.status === 'flagged').length  ?? 0
+    const yTotal = yestW?.length ?? 0
+    const ySite  = yestW?.filter(w => w.status === 'waiting').length  ?? 0
+    const yComp  = yestW?.filter(w => w.status === 'complete').length ?? 0
+    const yFlag  = yestW?.filter(w => w.status === 'flagged').length  ?? 0
 
-    // ── Today's alerts ────────────────────────────────────────
     const { data: todayAlerts } = await supabase
-      .from('alerts')
-      .select('id, resolved_at')
-      .gte('created_at', todayISO)
-    const alertCount  = todayAlerts?.length ?? 0
+      .from('alerts').select('id, resolved_at').gte('created_at', todayISO)
+    const alertCount = todayAlerts?.length ?? 0
 
     const { data: yestAlerts } = await supabase
-      .from('alerts')
-      .select('id')
-      .gte('created_at', ydayISO)
-      .lt('created_at', todayISO)
+      .from('alerts').select('id')
+      .gte('created_at', ydayISO).lt('created_at', todayISO)
     const yAlertCount = yestAlerts?.length ?? 0
 
     setStats([
@@ -211,7 +183,6 @@ export default function OverviewPage() {
       { label: "TODAY'S ALERTS",    value: alertCount, delta: alertCount - yAlertCount },
     ])
 
-    // ── Live vehicles ─────────────────────────────────────────
     const { data: liveV } = await supabase
       .from('weighings')
       .select('id, token_number, plate_number, loaded_weight, entry_at, entry_operator_id')
@@ -220,7 +191,6 @@ export default function OverviewPage() {
       .limit(10)
     setVehicles(liveV || [])
 
-    // ── Recent activity ───────────────────────────────────────
     const { data: recentW } = await supabase
       .from('weighings')
       .select(`id, plate_number, token_number, status, entry_at, return_at,
@@ -237,9 +207,7 @@ export default function OverviewPage() {
     let opNames: Record<string, string> = {}
     if (opIds.length > 0) {
       const { data: ops } = await supabase
-        .from('operators')
-        .select('id, name')
-        .in('id', opIds)
+        .from('operators').select('id, name').in('id', opIds)
       ;(ops || []).forEach((o: any) => { opNames[o.id] = o.name })
     }
 
@@ -263,12 +231,9 @@ export default function OverviewPage() {
     acts.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
     setActivity(acts.slice(0, 12))
 
-    // ── Recent alerts ─────────────────────────────────────────
     const { data: recentAlerts } = await supabase
-      .from('alerts')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(6)
+      .from('alerts').select('*')
+      .order('created_at', { ascending: false }).limit(6)
     setAlerts(recentAlerts || [])
 
     setLoading(false)
@@ -284,11 +249,107 @@ export default function OverviewPage() {
     return () => { supabase.removeChannel(ch) }
   }, [fetchAll])
 
-  // Page header date rendered in Karachi time
   const todayLabel = pkDateLong(new Date().toISOString())
 
   return (
     <>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        /* Stats: 5 across on desktop, 2-3 grid on mobile */
+        .overview-stats {
+          display: flex;
+          gap: 16px;
+          margin-bottom: 28px;
+        }
+        @media (max-width: 900px) {
+          .overview-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+          /* 5th card spans full width */
+          .overview-stats > *:last-child:nth-child(odd) {
+            grid-column: 1 / -1;
+          }
+        }
+        @media (max-width: 480px) {
+          .overview-stats {
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+        }
+
+        /* Stat card font shrinks on mobile */
+        @media (max-width: 480px) {
+          .stat-value { font-size: 24px !important; }
+          .stat-label { font-size: 9px !important; }
+        }
+
+        /* 2-col panel: side by side on md+, stacked on mobile */
+        .overview-panels {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+        @media (max-width: 768px) {
+          .overview-panels {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Page padding */
+        .overview-root {
+          flex: 1;
+          overflow-y: auto;
+          background: #F8F9FA;
+          padding: 32px 32px 48px;
+        }
+        @media (max-width: 768px) {
+          .overview-root { padding: 20px 16px 40px; }
+        }
+        @media (max-width: 480px) {
+          .overview-root { padding: 16px 12px 32px; }
+        }
+
+        /* Page header */
+        .overview-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 28px;
+          gap: 12px;
+        }
+        @media (max-width: 480px) {
+          .overview-header { margin-bottom: 16px; }
+          .overview-header h1 { font-size: 18px !important; }
+          .overview-date-badge { display: none; }
+        }
+
+        /* Alert modal responsive */
+        .alert-modal-inner {
+          background: white;
+          border-radius: 12px;
+          width: 100%;
+          max-width: 520px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+          overflow: hidden;
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          margin: 16px;
+        }
+        @media (max-width: 560px) {
+          .alert-modal-inner {
+            max-width: 100%;
+            max-height: 100vh;
+            height: 100%;
+            border-radius: 0;
+            margin: 0;
+          }
+        }
+      `}</style>
+
       {lightbox && (
         <SnapshotLightbox
           url={lightbox.outdoor || lightbox.indoor || ''}
@@ -307,43 +368,42 @@ export default function OverviewPage() {
         />
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', background: '#F8F9FA',
-                    padding: '32px 32px 48px' }}>
+      <div className="overview-root">
 
         {/* Page header */}
-        <div style={{ display: 'flex', alignItems: 'center',
-                      justifyContent: 'space-between', marginBottom: 28 }}>
+        <div className="overview-header">
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0F172A',
                         fontFamily: 'DM Sans, sans-serif', margin: 0 }}>
             Overview
           </h1>
-          <div style={{ fontSize: 13, color: '#64748B', background: 'white',
-                        border: '1px solid #E2E8F0', borderRadius: 8,
-                        padding: '8px 14px', fontFamily: 'DM Sans, sans-serif' }}>
+          <div className="overview-date-badge"
+            style={{ fontSize: 13, color: '#64748B', background: 'white',
+                      border: '1px solid #E2E8F0', borderRadius: 8,
+                      padding: '8px 14px', fontFamily: 'DM Sans, sans-serif',
+                      whiteSpace: 'nowrap' }}>
             {todayLabel}
           </div>
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
+        <div className="overview-stats">
           {loading
             ? [1,2,3,4,5].map(i => (
-                <div key={i} style={{ flex: 1, height: 96, borderRadius: 10,
+                <div key={i} style={{ height: 96, borderRadius: 10,
                   background: '#F1F5F9', animation: 'pulse 1.5s ease-in-out infinite' }} />
               ))
             : stats.map(s => <StatCardUI key={s.label} {...s} />)
           }
         </div>
 
-        {/* Main 3-column grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr',
-                      gap: 20, marginBottom: 24 }}>
+        {/* Main 2-column panels */}
+        <div className="overview-panels">
 
-          {/* ── Live vehicles ─────────────────────────────── */}
+          {/* ── Live vehicles ── */}
           <div style={{ background: 'white', borderRadius: 10,
                         border: '1px solid #E2E8F0',
                         display: 'flex', flexDirection: 'column',
-                        overflow: 'hidden' }}>
+                        overflow: 'hidden', minHeight: 280 }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0',
                           display: 'flex', justifyContent: 'space-between',
                           alignItems: 'center' }}>
@@ -376,23 +436,25 @@ export default function OverviewPage() {
                   border: '1px solid #E2E8F0', padding: '12px 14px',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between',
-                                alignItems: 'center', marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                alignItems: 'center', marginBottom: 4, gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center',
+                                  gap: 8, minWidth: 0 }}>
                       <span style={{
                         fontFamily: 'DM Mono, monospace', fontSize: 11,
                         background: '#EFF6FF', color: '#1D4ED8',
                         padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+                        flexShrink: 0,
                       }}>{v.token_number}</span>
                       <span style={{ fontFamily: 'DM Mono, monospace',
                                      fontSize: 15, fontWeight: 700,
-                                     color: '#0F172A' }}>
+                                     color: '#0F172A', overflow: 'hidden',
+                                     textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {v.plate_number || '—'}
                       </span>
                     </div>
                     <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13,
-                                   color: '#0F172A', fontWeight: 500 }}>
-                      {v.loaded_weight
-                        ? `${v.loaded_weight.toLocaleString()} kg` : '—'}
+                                   color: '#0F172A', fontWeight: 500, flexShrink: 0 }}>
+                      {v.loaded_weight ? `${v.loaded_weight.toLocaleString()} kg` : '—'}
                     </span>
                   </div>
                   <div style={{ fontSize: 11, color: siteColor(v.entry_at),
@@ -404,11 +466,11 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {/* ── Recent alerts ─────────────────────────────── */}
+          {/* ── Recent alerts ── */}
           <div style={{ background: 'white', borderRadius: 10,
                         border: '1px solid #E2E8F0',
                         display: 'flex', flexDirection: 'column',
-                        overflow: 'hidden' }}>
+                        overflow: 'hidden', minHeight: 280 }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0',
                           display: 'flex', justifyContent: 'space-between',
                           alignItems: 'center' }}>
@@ -417,7 +479,8 @@ export default function OverviewPage() {
                 RECENT ALERTS
               </div>
               <a href="/alerts" style={{ fontSize: 12, color: '#2563EB',
-                                         textDecoration: 'none', fontWeight: 500 }}>
+                                         textDecoration: 'none', fontWeight: 500,
+                                         whiteSpace: 'nowrap' }}>
                 View all →
               </a>
             </div>
@@ -443,8 +506,9 @@ export default function OverviewPage() {
                     cursor: 'pointer', textAlign: 'left', width: '100%',
                   }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between',
-                                alignItems: 'flex-start', marginBottom: 4 }}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                alignItems: 'flex-start', marginBottom: 4, gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center',
+                                  minWidth: 0, flexWrap: 'wrap' }}>
                       <span style={{
                         fontSize: 10, fontWeight: 700,
                         color: severityColor(a.severity),
@@ -462,7 +526,7 @@ export default function OverviewPage() {
                       )}
                     </div>
                     <span style={{ fontSize: 10, color: '#94A3B8',
-                                   fontFamily: 'DM Mono, monospace' }}>
+                                   fontFamily: 'DM Mono, monospace', flexShrink: 0 }}>
                       {pkTimeShort(a.created_at)}
                     </span>
                   </div>
@@ -472,8 +536,7 @@ export default function OverviewPage() {
                   </div>
                   <div style={{ fontSize: 11, color: '#94A3B8' }}>
                     {cameraLabel(a.camera_id)}
-                    {a.extra?.duration_sec
-                      ? ` · ${a.extra.duration_sec}s` : ''}
+                    {a.extra?.duration_sec ? ` · ${a.extra.duration_sec}s` : ''}
                   </div>
                 </button>
               ))}
@@ -481,8 +544,6 @@ export default function OverviewPage() {
           </div>
         </div>
       </div>
-
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
     </>
   )
 }
@@ -491,10 +552,10 @@ export default function OverviewPage() {
 function AlertDetailModal({
   alert, onClose, onLightbox, onResolved,
 }: {
-  alert:       Alert
-  onClose:     () => void
-  onLightbox:  (url: string) => void
-  onResolved:  () => void
+  alert:      Alert
+  onClose:    () => void
+  onLightbox: (url: string) => void
+  onResolved: () => void
 }) {
   const [resolving, setResolving] = useState(false)
 
@@ -516,28 +577,24 @@ function AlertDetailModal({
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 300, backdropFilter: 'blur(2px)',
     }}>
-      <div style={{
-        background: 'white', borderRadius: 12, width: '100%', maxWidth: 520,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
-        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-      }}>
+      <div className="alert-modal-inner">
         {/* Header */}
         <div style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0',
                       display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'center',
+                      alignItems: 'center', flexShrink: 0,
                       borderLeft: `4px solid ${severityColor(alert.severity)}` }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
               {detectorLabel(alert.detector)}
             </div>
-            <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>
-              {cameraLabel(alert.camera_id)} ·{' '}
-              {pkDateTimeFull(alert.created_at)}
+            <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {cameraLabel(alert.camera_id)} · {pkDateTimeFull(alert.created_at)}
             </div>
           </div>
           <button onClick={onClose}
             style={{ background: 'none', border: 'none',
-                      cursor: 'pointer', color: '#94A3B8', padding: 4 }}>
+                      cursor: 'pointer', color: '#94A3B8', padding: 4, flexShrink: 0 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M18 6 6 18M6 6l12 12"/>
@@ -548,7 +605,6 @@ function AlertDetailModal({
         <div style={{ overflowY: 'auto', padding: 24,
                       display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Snapshot */}
           {alert.snapshot_url && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
@@ -583,7 +639,6 @@ function AlertDetailModal({
             </div>
           )}
 
-          {/* Details */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Row label="MESSAGE"    val={alert.message} />
             <Row label="SEVERITY"   val={alert.severity.toUpperCase()}
@@ -591,7 +646,7 @@ function AlertDetailModal({
             <Row label="CONFIDENCE" val={`${(alert.confidence * 100).toFixed(0)}%`} mono />
             <Row label="TRIGGERED"  val={pkDateTimeFull(alert.created_at)} mono />
             {alert.resolved_at && (
-              <Row label="RESOLVED"  val={pkDateTimeFull(alert.resolved_at)} mono />
+              <Row label="RESOLVED" val={pkDateTimeFull(alert.resolved_at)} mono />
             )}
             {alert.extra?.duration_sec && (
               <Row label="DURATION" val={`${alert.extra.duration_sec}s`} mono />
@@ -601,7 +656,6 @@ function AlertDetailModal({
             )}
           </div>
 
-          {/* Resolve button */}
           {!alert.is_resolved && (
             <button onClick={markResolved} disabled={resolving}
               style={{
@@ -636,7 +690,7 @@ function Row({ label, val, mono, color }: {
                      color: '#94A3B8', flexShrink: 0 }}>{label}</span>
       <span style={{ fontSize: 13, color: color || '#0F172A',
                      fontFamily: mono ? 'DM Mono, monospace' : 'DM Sans, sans-serif',
-                     textAlign: 'right' }}>{val}</span>
+                     textAlign: 'right', wordBreak: 'break-word' }}>{val}</span>
     </div>
   )
 }

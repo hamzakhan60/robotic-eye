@@ -1,6 +1,6 @@
 // src/app/(operator)/history/page.tsx
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SnapshotLightbox } from '@/components/operator/SnapshotLightbox'
 import { EditModal }        from '@/components/operator/EditModal'
 import {
@@ -44,6 +44,7 @@ function Btn({ label, active, onClick, dark = false }: {
       border: `1.5px solid ${active ? (dark ? '#0F172A' : '#2563EB') : '#E2E8F0'}`,
       borderRadius: 6, fontSize: 12, fontWeight: 600, letterSpacing: '0.06em',
       cursor: 'pointer', fontFamily: 'DM Sans,sans-serif', transition: 'all 0.12s',
+      whiteSpace: 'nowrap',
     }}>{label}</button>
   )
 }
@@ -125,12 +126,14 @@ function AuditTrail({ entries }: { entries: AuditEntry[] }) {
 }
 
 function DetailPanel({
-  selected, auditMap, onLightbox, onEdited,
+  selected, auditMap, onLightbox, onEdited, onClose, isMobile,
 }: {
   selected:   HistoryRow
   auditMap:   Record<string, AuditEntry[]>
   onLightbox: (outdoor: string | null, indoor: string | null) => void
   onEdited:   () => void
+  onClose?:   () => void
+  isMobile?:  boolean
 }) {
   const [showEdit, setShowEdit] = useState(false)
   const canEdit = isSameDay(selected)
@@ -142,20 +145,11 @@ function DetailPanel({
   const entryIndoor  = w?.entry_indoor_snapshot_url  ?? d?.indoor_snapshot_url  ?? null
   const exitOutdoor  = w?.return_snapshot_url        ?? null
   const exitIndoor   = w?.return_indoor_snapshot_url ?? null
-
   const dismissReason = d?.dismiss_reason ?? null
 
   const snapshotGroups = [
-    {
-      label:   'ENTRY',
-      outdoor: entryOutdoor,
-      indoor:  entryIndoor,
-    },
-    ...(exitOutdoor || exitIndoor ? [{
-      label:   'EXIT',
-      outdoor: exitOutdoor,
-      indoor:  exitIndoor,
-    }] : []),
+    { label: 'ENTRY', outdoor: entryOutdoor, indoor: entryIndoor },
+    ...(exitOutdoor || exitIndoor ? [{ label: 'EXIT', outdoor: exitOutdoor, indoor: exitIndoor }] : []),
   ]
 
   return (
@@ -170,6 +164,23 @@ function DetailPanel({
 
       <div style={{ flex:1, overflowY:'auto', padding:20,
                     display:'flex', flexDirection:'column', gap:16 }}>
+
+        {/* Mobile close button */}
+        {isMobile && onClose && (
+          <button onClick={onClose} style={{
+            width: '100%', height: 40, background: '#F8F9FA',
+            border: '1.5px solid #E2E8F0', borderRadius: 8,
+            color: '#64748B', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M19 12H5M12 5l-7 7 7 7"/>
+            </svg>
+            BACK TO LIST
+          </button>
+        )}
 
         {/* Edit button — same-day only */}
         {canEdit ? (
@@ -210,7 +221,6 @@ function DetailPanel({
             {snapshotGroups.map(group => (
               (group.outdoor || group.indoor) && (
                 <div key={group.label}>
-                  {/* Group header */}
                   <div style={{
                     fontSize:10, fontWeight:700, letterSpacing:'0.1em',
                     color: group.label === 'EXIT' ? '#059669' : '#2563EB',
@@ -223,8 +233,6 @@ function DetailPanel({
                     }} />
                     {group.label}
                   </div>
-
-                  {/* Two-column grid for outdoor + indoor */}
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                     {[
                       { url: group.outdoor, label: 'PLATE CAMERA'  },
@@ -353,13 +361,80 @@ export default function HistoryPage() {
   const [selected,     setSelected]   = useState<HistoryRow | null>(null)
   const [lightbox,     setLightbox]   = useState<{
     outdoor: string | null; indoor: string | null } | null>(null)
+  const [isMobile,     setIsMobile]   = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    setIsMobile(mq.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   const { rows, auditMap, loading, error, refetch } = useHistory({
     dateFilter, statusFilter, customFrom, customTo,
   })
 
+  // On mobile, when a row is selected show the detail panel full-screen
+  const showMobileDetail = isMobile && selected !== null
+
   return (
     <>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        /* Mobile row card — hide less important columns */
+        @media (max-width: 768px) {
+          .history-row-grid {
+            grid-template-columns: 1fr auto 80px !important;
+          }
+          .history-col-token,
+          .history-col-loaded,
+          .history-col-net,
+          .history-col-time-desktop {
+            display: none !important;
+          }
+          .history-col-time-mobile {
+            display: block !important;
+          }
+        }
+
+        @media (min-width: 769px) {
+          .history-col-time-mobile { display: none !important; }
+        }
+
+        /* Scrollable filter row */
+        .filter-scroll {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          padding-bottom: 2px;
+        }
+        .filter-scroll::-webkit-scrollbar { display: none; }
+
+        /* Mobile drawer overlay */
+        .detail-drawer {
+          position: fixed;
+          inset: 0;
+          background: white;
+          z-index: 100;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .detail-drawer-header {
+          padding: 16px 20px;
+          border-bottom: 1px solid #E2E8F0;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-shrink: 0;
+        }
+      `}</style>
+
       {lightbox && (
         <SnapshotLightbox
           url={lightbox.outdoor || lightbox.indoor || ''}
@@ -367,6 +442,32 @@ export default function HistoryPage() {
           indoor={lightbox.indoor}
           onClose={() => setLightbox(null)}
         />
+      )}
+
+      {/* ── Mobile detail drawer ── */}
+      {showMobileDetail && selected && (
+        <div className="detail-drawer">
+          <div className="detail-drawer-header">
+            <button
+              onClick={() => setSelected(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                       padding: 4, color: '#64748B', display: 'flex' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M19 12H5M12 5l-7 7 7 7"/>
+              </svg>
+            </button>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em',
+                          color: '#94A3B8' }}>DETAILS</div>
+          </div>
+          <DetailPanel
+            selected={selected}
+            auditMap={auditMap}
+            onLightbox={(outdoor, indoor) => setLightbox({ outdoor, indoor })}
+            onEdited={() => { setSelected(null); refetch() }}
+            isMobile
+          />
+        </div>
       )}
 
       {/* Tab bar */}
@@ -388,36 +489,43 @@ export default function HistoryPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── LEFT — list ───────────────────────────────── */}
-        <div style={{ flex: '0 0 calc(100% - 340px)', display: 'flex',
-                      flexDirection: 'column', overflow: 'hidden',
-                      borderRight: '1px solid #E2E8F0' }}>
+        <div style={{
+          flex: isMobile ? '1' : '0 0 calc(100% - 340px)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          borderRight: isMobile ? 'none' : '1px solid #E2E8F0',
+        }}>
 
           {/* Filters */}
-          <div style={{ padding: '14px 24px', background: 'white',
+          <div style={{ padding: '12px 16px', background: 'white',
                         borderBottom: '1px solid #E2E8F0',
-                        display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Date filters — horizontally scrollable on mobile */}
+            <div className="filter-scroll">
               <Btn label="TODAY"      active={dateFilter === 'today'}  onClick={() => setDateFilter('today')} />
               <Btn label="THIS WEEK"  active={dateFilter === 'week'}   onClick={() => setDateFilter('week')} />
               <Btn label="THIS MONTH" active={dateFilter === 'month'}  onClick={() => setDateFilter('month')} />
               <Btn label="CUSTOM"     active={dateFilter === 'custom'} onClick={() => setDateFilter('custom')} />
-              {dateFilter === 'custom' && (
-                <>
-                  <input type="date" value={customFrom}
-                    onChange={e => setCustomFrom(e.target.value)}
-                    style={{ height: 34, padding: '0 10px', border: '1.5px solid #E2E8F0',
-                              borderRadius: 6, fontSize: 13, outline: 'none',
-                              fontFamily: 'DM Sans,sans-serif', color: '#0F172A' }} />
-                  <span style={{ color: '#94A3B8', fontSize: 13 }}>to</span>
-                  <input type="date" value={customTo}
-                    onChange={e => setCustomTo(e.target.value)}
-                    style={{ height: 34, padding: '0 10px', border: '1.5px solid #E2E8F0',
-                              borderRadius: 6, fontSize: 13, outline: 'none',
-                              fontFamily: 'DM Sans,sans-serif', color: '#0F172A' }} />
-                </>
-              )}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            {/* Custom date range */}
+            {dateFilter === 'custom' && (
+              <div className="filter-scroll">
+                <input type="date" value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  style={{ height: 34, padding: '0 10px', border: '1.5px solid #E2E8F0',
+                            borderRadius: 6, fontSize: 13, outline: 'none',
+                            fontFamily: 'DM Sans,sans-serif', color: '#0F172A',
+                            minWidth: 130 }} />
+                <span style={{ color: '#94A3B8', fontSize: 13, whiteSpace: 'nowrap' }}>to</span>
+                <input type="date" value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  style={{ height: 34, padding: '0 10px', border: '1.5px solid #E2E8F0',
+                            borderRadius: 6, fontSize: 13, outline: 'none',
+                            fontFamily: 'DM Sans,sans-serif', color: '#0F172A',
+                            minWidth: 130 }} />
+              </div>
+            )}
+            {/* Status filters */}
+            <div className="filter-scroll">
               <Btn label="ALL"       active={statusFilter === 'all'}       onClick={() => setStatus('all')} dark />
               <Btn label="ENTRY"     active={statusFilter === 'waiting'}   onClick={() => setStatus('waiting')} />
               <Btn label="RETURN"    active={statusFilter === 'complete'}  onClick={() => setStatus('complete')} />
@@ -427,7 +535,7 @@ export default function HistoryPage() {
 
           {/* Error */}
           {error && (
-            <div style={{ margin: '12px 24px', background: '#FEF2F2',
+            <div style={{ margin: '12px 16px', background: '#FEF2F2',
                           border: '1px solid #FECACA', borderRadius: 8,
                           padding: '10px 14px', fontSize: 13, color: '#DC2626' }}>
               {error}
@@ -435,7 +543,7 @@ export default function HistoryPage() {
           )}
 
           {/* Rows */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px',
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px',
                         display: 'flex', flexDirection: 'column', gap: 10 }}>
 
             {loading && [1, 2, 3].map(i => (
@@ -469,6 +577,8 @@ export default function HistoryPage() {
               const time     = new Date(isW ? w!.entry_at : dm!.triggered_at)
                 .toLocaleTimeString('en-GB', {
                   hour: '2-digit', minute: '2-digit', second: '2-digit' })
+              const dateStr  = new Date(isW ? w!.entry_at : dm!.triggered_at)
+                .toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
               const token    = w ? w.token_number : '—'
               const plate    = w ? (w.plate_number || '—') : '—'
               const loaded   = w ? w.loaded_weight
@@ -485,23 +595,28 @@ export default function HistoryPage() {
 
               return (
                 <button key={row.id} onClick={() => setSelected(row)}
+                  className="history-row-grid"
                   style={{
                     width: '100%', textAlign: 'left', cursor: 'pointer',
                     background: isActive ? '#F0F7FF' : 'white',
                     border: `1.5px solid ${isActive ? '#2563EB' : '#E2E8F0'}`,
-                    borderRadius: 10, padding: '16px 20px',
+                    borderRadius: 10, padding: '14px 16px',
                     display: 'grid', alignItems: 'center',
                     gridTemplateColumns: '80px 1fr 110px 130px 130px 110px 28px',
-                    gap: 12, transition: 'all 0.12s',
+                    gap: 10, transition: 'all 0.12s',
                     boxShadow: isActive ? '0 0 0 3px rgba(37,99,235,0.07)' : 'none',
                   }}>
                   {/* Token */}
-                  <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 12,
-                                 color: '#64748B', fontWeight: 500 }}>{token}</span>
+                  <span className="history-col-token"
+                    style={{ fontFamily: 'DM Mono,monospace', fontSize: 12,
+                             color: '#64748B', fontWeight: 500 }}>{token}</span>
+
                   {/* Plate + edit dot */}
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 16,
-                                   fontWeight: 700, color: '#0F172A' }}>{plate}</span>
+                                   fontWeight: 700, color: '#0F172A',
+                                   overflow: 'hidden', textOverflow: 'ellipsis',
+                                   whiteSpace: 'nowrap' }}>{plate}</span>
                     {hasEdits && (
                       <span title="Values edited by operator"
                         style={{ width: 7, height: 7, borderRadius: 4,
@@ -514,28 +629,44 @@ export default function HistoryPage() {
                                   background: '#2563EB', flexShrink: 0,
                                   display: 'inline-block', opacity: 0.4 }} />
                     )}
+                    {/* Mobile-only: token + time below plate */}
+                    <span className="history-col-time-mobile"
+                      style={{ display: 'none', fontSize: 11,
+                               color: '#94A3B8', fontFamily: 'DM Mono,monospace',
+                               marginLeft: 4 }}>
+                      {token} · {dateStr} {time}
+                    </span>
                   </span>
+
                   {/* Badge */}
                   <span style={{ background: badge.bg, color: badge.color,
                                  borderRadius: 6, padding: '3px 10px',
                                  fontSize: 11, fontWeight: 700,
-                                 letterSpacing: '0.06em', textAlign: 'center' }}>
+                                 letterSpacing: '0.06em', textAlign: 'center',
+                                 whiteSpace: 'nowrap' }}>
                     {badge.label}
                   </span>
+
                   {/* Loaded */}
-                  <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 14,
-                                 color: '#0F172A', fontWeight: 500 }}>
+                  <span className="history-col-loaded"
+                    style={{ fontFamily: 'DM Mono,monospace', fontSize: 14,
+                             color: '#0F172A', fontWeight: 500 }}>
                     {loaded ? `${loaded.toLocaleString()} kg` : '—'}
                   </span>
+
                   {/* Net */}
-                  <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 14,
-                                 color: net ? '#059669' : '#94A3B8',
-                                 fontWeight: net ? 700 : 400 }}>
+                  <span className="history-col-net"
+                    style={{ fontFamily: 'DM Mono,monospace', fontSize: 14,
+                             color: net ? '#059669' : '#94A3B8',
+                             fontWeight: net ? 700 : 400 }}>
                     {net ? `${net.toLocaleString()} kg` : '—'}
                   </span>
-                  {/* Time */}
-                  <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 13,
-                                 color: '#64748B' }}>{time}</span>
+
+                  {/* Time (desktop) */}
+                  <span className="history-col-time-desktop"
+                    style={{ fontFamily: 'DM Mono,monospace', fontSize: 13,
+                             color: '#64748B' }}>{time}</span>
+
                   {/* Arrow */}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke={isActive ? '#2563EB' : '#CBD5E1'}
@@ -548,36 +679,48 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* ── RIGHT — detail panel ──────────────────────── */}
-        <div style={{ width: 340, flexShrink: 0, background: 'white',
-                      display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em',
-                          color: '#94A3B8' }}>DETAILS</div>
-          </div>
-
-          {!selected ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center',
-                          justifyContent: 'center', color: '#CBD5E1',
-                          fontSize: 13, textAlign: 'center',
-                          padding: 24, lineHeight: 1.6 }}>
-              Select a record<br/>to view details
+        {/* ── RIGHT — detail panel (desktop only) ──────── */}
+        {!isMobile && (
+          <div style={{ width: 340, flexShrink: 0, background: 'white',
+                        display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em',
+                            color: '#94A3B8' }}>DETAILS</div>
             </div>
-          ) : (
-            <DetailPanel
-              selected={selected}
-              auditMap={auditMap}
-              onLightbox={(outdoor, indoor) => setLightbox({ outdoor, indoor })}
-              onEdited={() => {
-                setSelected(null)
-                refetch()
-              }}
-            />
-          )}
-        </div>
-      </div>
 
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+            {!selected ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', color: '#CBD5E1',
+                            fontSize: 13, textAlign: 'center',
+                            padding: 24, lineHeight: 1.6 }}>
+                Select a record<br/>to view details
+              </div>
+            ) : (
+              <DetailPanel
+                selected={selected}
+                auditMap={auditMap}
+                onLightbox={(outdoor, indoor) => setLightbox({ outdoor, indoor })}
+                onEdited={() => { setSelected(null); refetch() }}
+              />
+            )}
+          </div>
+        )}
+      </div>
     </>
+  )
+}
+
+/* ── Sub-components ── */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.1em', color: '#64748B',
+      }}>
+        {label}
+      </label>
+      {children}
+    </div>
   )
 }

@@ -23,7 +23,6 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   )
 }
 
-// ── Tab types ─────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'security' | 'notifications'
 
 export default function AccountPage() {
@@ -38,12 +37,10 @@ export default function AccountPage() {
   const [tab, setTab] = useState<Tab>('profile')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Profile form state
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [profileInit, setProfileInit] = useState(false)
 
-  // Security form state
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
@@ -52,7 +49,6 @@ export default function AccountPage() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [pwError, setPwError] = useState<string | null>(null)
 
-  // Populate form once profile loads
   if (profile && !profileInit) {
     setName(profile.name)
     setPhone(profile.phone || '')
@@ -75,9 +71,7 @@ export default function AccountPage() {
     ? format(new Date(profile.created_at), 'MMM yyyy')
     : '—'
 
-  const handleSaveProfile = () => {
-    updateProfile(name.trim(), phone.trim())
-  }
+  const handleSaveProfile = () => updateProfile(name.trim(), phone.trim())
 
   const handleChangePw = async () => {
     setPwError(null)
@@ -89,8 +83,9 @@ export default function AccountPage() {
 
   return (
     <div className="min-h-screen bg-[#F4F5F7]">
+
       {/* Breadcrumb */}
-      <div className="max-w-5xl mx-auto px-6 pt-8 pb-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-4 sm:pb-6">
         <nav className="flex items-center gap-2 text-sm text-slate-500">
           <a href="/dashboard" className="hover:text-slate-700 transition-colors">Dashboard</a>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,46 +95,51 @@ export default function AccountPage() {
         </nav>
       </div>
 
-      {/* Main layout */}
-      <div className="max-w-5xl mx-auto px-6 pb-12 flex gap-6">
+      {/* Main layout — stacks on mobile, side-by-side on md+ */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-12 flex flex-col md:flex-row gap-6 items-start">
 
-        {/* Left card — avatar + identity */}
-        <div className="w-72 shrink-0">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col items-center text-center">
+        {/* ── Left card — avatar + identity ── */}
+        <div className="w-full md:w-72 md:shrink-0">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col items-center text-center
+                          md:flex-col sm:flex-row sm:text-left sm:items-start sm:gap-6 md:text-center md:items-center">
+
             {/* Avatar */}
-            <div className="relative mb-4">
+            <div className="relative mb-4 sm:mb-0 md:mb-4 shrink-0">
               {profile?.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
-                  className="w-28 h-28 rounded-full object-cover"
+                  className="w-24 h-24 sm:w-20 sm:h-20 md:w-28 md:h-28 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-28 h-28 rounded-full bg-blue-600 flex items-center justify-center">
-                  <span className="text-white text-3xl font-bold tracking-wide">{initials}</span>
+                <div className="w-24 h-24 sm:w-20 sm:h-20 md:w-28 md:h-28 rounded-full bg-blue-600 flex items-center justify-center">
+                  <span className="text-white text-2xl md:text-3xl font-bold tracking-wide">{initials}</span>
                 </div>
               )}
             </div>
 
-            <h2 className="text-lg font-semibold text-slate-800 mb-0.5">{profile?.name}</h2>
-            <p className="text-xs text-slate-500 mb-4 font-mono">EMP-{profile?.employee_id?.replace('OP-', '') || '—'}</p>
+            {/* Identity info */}
+            <div className="flex flex-col items-center sm:items-start md:items-center flex-1">
+              <h2 className="text-lg font-semibold text-slate-800 mb-0.5">{profile?.name}</h2>
+              <p className="text-xs text-slate-500 mb-3 font-mono">
+                EMP-{profile?.employee_id?.replace('OP-', '') || '—'}
+              </p>
 
-            {/* Role badge */}
-            <span className="px-4 py-1 rounded border border-blue-300 text-blue-700 text-xs font-semibold tracking-wider uppercase mb-3">
-              {profile?.role || 'Operator'}
-            </span>
-
-            {/* Status */}
-            <div className="flex items-center gap-2 mb-3">
-              <span className={`w-2.5 h-2.5 rounded-full ${profile?.is_active ? 'bg-green-500' : 'bg-slate-400'}`} />
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                {profile?.is_active ? 'Active' : 'Inactive'}
+              <span className="px-4 py-1 rounded border border-blue-300 text-blue-700 text-xs font-semibold tracking-wider uppercase mb-3">
+                {profile?.role || 'Operator'}
               </span>
+
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${profile?.is_active ? 'bg-green-500' : 'bg-slate-400'}`} />
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  {profile?.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-400 mb-0 sm:mb-0 md:mb-0">Member since {memberSince}</p>
             </div>
 
-            <p className="text-xs text-slate-400">Member since {memberSince}</p>
-
-            {/* Change photo button */}
+            {/* Change photo button — full width on all sizes */}
             <input
               ref={fileRef}
               type="file"
@@ -154,8 +154,8 @@ export default function AccountPage() {
             <button
               onClick={() => fileRef.current?.click()}
               disabled={saving}
-              className="mt-6 w-full flex items-center justify-center gap-2 border border-slate-300
-                         rounded-lg py-2.5 text-sm text-slate-600 font-medium
+              className="mt-5 sm:mt-4 md:mt-6 w-full sm:w-full flex items-center justify-center gap-2
+                         border border-slate-300 rounded-lg py-2.5 text-sm text-slate-600 font-medium
                          hover:bg-slate-50 transition-colors disabled:opacity-50"
             >
               <Camera className="w-4 h-4" />
@@ -164,16 +164,18 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* Right card — tabs */}
-        <div className="flex-1">
+        {/* ── Right card — tabs ── */}
+        <div className="flex-1 w-full min-w-0">
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+
             {/* Tab bar */}
-            <div className="flex border-b border-slate-200">
+            <div className="flex border-b border-slate-200 overflow-x-auto scrollbar-hide">
               {(['profile', 'security'] as Tab[]).map(t => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`px-8 py-4 text-sm font-semibold uppercase tracking-wider transition-colors relative
+                  className={`px-6 sm:px-8 py-4 text-sm font-semibold uppercase tracking-wider
+                              transition-colors relative whitespace-nowrap flex-shrink-0
                     ${tab === t ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   {t}
@@ -186,19 +188,21 @@ export default function AccountPage() {
 
             {/* Success / error banners */}
             {successMsg && (
-              <div className="mx-6 mt-4 flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-2.5 text-sm">
+              <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 bg-green-50 border border-green-200
+                              text-green-700 rounded-lg px-4 py-2.5 text-sm">
                 <Check className="w-4 h-4 shrink-0" /> {successMsg}
               </div>
             )}
             {error && (
-              <div className="mx-6 mt-4 flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-2.5 text-sm">
+              <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 bg-red-50 border border-red-200
+                              text-red-600 rounded-lg px-4 py-2.5 text-sm">
                 <AlertCircle className="w-4 h-4 shrink-0" /> {error}
               </div>
             )}
 
-            {/* ── PROFILE TAB ─────────────────────────────────────────── */}
+            {/* ── PROFILE TAB ── */}
             {tab === 'profile' && (
-              <div className="p-8 space-y-6">
+              <div className="p-5 sm:p-8 space-y-5 sm:space-y-6">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                     Full Name
@@ -243,7 +247,7 @@ export default function AccountPage() {
                   <button
                     onClick={handleSaveProfile}
                     disabled={saving}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white
                                font-semibold px-8 py-3 rounded-lg transition-colors text-sm uppercase tracking-wider"
                   >
                     {saving ? 'Saving…' : 'Save Changes'}
@@ -252,9 +256,9 @@ export default function AccountPage() {
               </div>
             )}
 
-            {/* ── SECURITY TAB ────────────────────────────────────────── */}
+            {/* ── SECURITY TAB ── */}
             {tab === 'security' && (
-              <div className="p-8 space-y-6">
+              <div className="p-5 sm:p-8 space-y-5 sm:space-y-6">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                     Current Password
@@ -299,7 +303,6 @@ export default function AccountPage() {
                       {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {/* Strength bar */}
                   {newPw.length > 0 && (
                     <div className="mt-2 flex gap-1">
                       {[1, 2, 3, 4].map(i => (
@@ -353,7 +356,7 @@ export default function AccountPage() {
                   <button
                     onClick={handleChangePw}
                     disabled={saving || !currentPw || !newPw || !confirmPw}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white
                                font-semibold px-8 py-3 rounded-lg transition-colors text-sm uppercase tracking-wider"
                   >
                     {saving ? 'Updating…' : 'Update Password'}

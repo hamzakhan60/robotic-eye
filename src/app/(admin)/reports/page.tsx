@@ -261,7 +261,7 @@ async function adminFetch(path: string) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Data fetching — queries Supabase directly via client
+// Data fetching
 // ─────────────────────────────────────────────────────────────
 async function fetchWeighbridgeStats(period: Period): Promise<WeighbridgeStats> {
   const supabase = getClient()
@@ -281,14 +281,12 @@ async function fetchWeighbridgeStats(period: Period): Promise<WeighbridgeStats> 
   const avgNetWeight      = totalTransactions ? totalNetWeight / totalTransactions : 0
   const editedCount       = data.filter(r => r.loaded_weight_edited || r.empty_weight_edited).length
 
-  // avg transaction time
   const withReturn = data.filter(r => r.entry_at && r.return_at)
   const avgMs = withReturn.length
     ? withReturn.reduce((s, r) => s + (new Date(r.return_at!).getTime() - new Date(r.entry_at!).getTime()), 0) / withReturn.length
     : 0
   const avgTransactionMinutes = avgMs / 60000
 
-  // peak hour
   const hourCounts: Record<string, number> = {}
   data.forEach(r => {
     const h = `${String(new Date(r.entry_at!).getHours()).padStart(2,'0')}:00`
@@ -296,12 +294,10 @@ async function fetchWeighbridgeStats(period: Period): Promise<WeighbridgeStats> 
   })
   const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—'
 
-  // status breakdown
   const statusMap: Record<string, number> = {}
   data.forEach(r => { statusMap[r.status ?? 'unknown'] = (statusMap[r.status ?? 'unknown'] ?? 0) + 1 })
   const statusBreakdown = Object.entries(statusMap).map(([status, count]) => ({ status, count }))
 
-  // daily trend
   const trendTx:  Record<string, number> = {}
   const trendWt:  Record<string, number> = {}
   buckets.forEach(b => { trendTx[b] = 0; trendWt[b] = 0 })
@@ -311,7 +307,6 @@ async function fetchWeighbridgeStats(period: Period): Promise<WeighbridgeStats> 
   })
   const dailyTrend = buckets.map(b => ({ label: b, transactions: trendTx[b], netWeight: trendWt[b] }))
 
-  // top operators
   const opMap: Record<string, number> = {}
   data.forEach(r => {
     const op = (r as any).operators
@@ -340,29 +335,24 @@ async function fetchAlertStats(period: Period): Promise<AlertStats> {
   const resolvedCount   = data.filter(r => r.is_resolved).length
   const unresolvedCount = totalAlerts - resolvedCount
 
-  // avg resolution time
   const withResolution = data.filter(r => r.is_resolved && r.resolved_at)
   const avgResMs = withResolution.length
     ? withResolution.reduce((s, r) => s + (new Date(r.resolved_at!).getTime() - new Date(r.created_at!).getTime()), 0) / withResolution.length
     : 0
   const avgResolutionMinutes = avgResMs / 60000
 
-  // by severity
   const sevMap: Record<string, number> = {}
   data.forEach(r => { sevMap[r.severity ?? 'info'] = (sevMap[r.severity ?? 'info'] ?? 0) + 1 })
   const bySeverity = Object.entries(sevMap).map(([severity, count]) => ({ severity, count })).sort((a,b)=>b.count-a.count)
 
-  // by event type
   const evMap: Record<string, number> = {}
   data.forEach(r => { evMap[r.event_type] = (evMap[r.event_type] ?? 0) + 1 })
   const byEventType = Object.entries(evMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([event_type,count])=>({event_type,count}))
 
-  // by detector
   const detMap: Record<string, number> = {}
   data.forEach(r => { detMap[r.detector] = (detMap[r.detector] ?? 0) + 1 })
   const byDetector = Object.entries(detMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([detector,count])=>({detector,count}))
 
-  // trend
   const trendTotal:    Record<string, number> = {}
   const trendResolved: Record<string, number> = {}
   buckets.forEach(b => { trendTotal[b] = 0; trendResolved[b] = 0 })
@@ -375,7 +365,6 @@ async function fetchAlertStats(period: Period): Promise<AlertStats> {
   })
   const dailyTrend = buckets.map(b => ({ label: b, total: trendTotal[b], resolved: trendResolved[b] }))
 
-  // top cameras
   const camMap: Record<string, number> = {}
   data.forEach(r => { if (r.camera_id) camMap[r.camera_id] = (camMap[r.camera_id] ?? 0) + 1 })
   const topCameras = Object.entries(camMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([camera_id,count])=>({camera_id,count}))
@@ -449,7 +438,6 @@ export default function ReportsPage() {
 
   const periodLabel = period === 'daily' ? 'Today' : period === 'weekly' ? 'This Week' : 'This Month'
 
-  // chart data helpers
   const wTrendTx  = wStats?.dailyTrend.map(d => ({ label: d.label, value: d.transactions })) ?? []
   const wTrendWt  = wStats?.dailyTrend.map(d => ({ label: d.label, value: d.netWeight })) ?? []
   const labelEvery = period === 'daily' ? 4 : period === 'monthly' ? 5 : 1
@@ -457,390 +445,454 @@ export default function ReportsPage() {
   const resolutionRate = aStats ? Math.round((aStats.resolvedCount / (aStats.totalAlerts || 1)) * 100) : 0
 
   return (
-    <div style={{
-      flex: 1, overflowY: 'auto', background: '#F8F9FA',
-      padding: '32px 36px 64px',
-      fontFamily: 'DM Sans, sans-serif',
-    }}>
-
-      {/* ── Page header ── */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start',
-        justifyContent: 'space-between', marginBottom: 32,
-      }}>
-        <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>
-            Reports & Analytics
-          </h1>
-          <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
-            Operational insights across weighbridge and security systems
-          </p>
-        </div>
-        <PeriodSelector value={period} onChange={p => { setPeriod(p); }} />
-      </div>
-
-      {/* ── Error ── */}
-      {error && (
-        <div style={{
-          background: '#FEF2F2', border: '1px solid #FECACA',
-          borderRadius: 8, padding: '12px 16px', marginBottom: 24,
-          fontSize: 13, color: '#DC2626',
-        }}>
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════
-          WEIGHBRIDGE SECTION
-      ══════════════════════════════════════════ */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        marginBottom: 16,
-      }}>
-        <div style={{
-          width: 3, height: 20, background: '#2563EB', borderRadius: 2, flexShrink: 0,
-        }} />
-        <SectionHeader
-          title="Weighbridge"
-          sub={`Weight scale performance — ${periodLabel}`}
-        />
-      </div>
-
-      {/* Stat cards row */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 14, marginBottom: 20,
-      }}>
-        {loading ? (
-          [1,2,3,4].map(i => (
-            <Card key={i}>
-              <Skel w="60%" h={10} />
-              <div style={{ marginTop: 10 }}><Skel w="40%" h={28} /></div>
-              <div style={{ marginTop: 8 }}><Skel w="70%" h={10} /></div>
-            </Card>
-          ))
-        ) : (
-          <>
-            <StatCard
-              label="TOTAL TRANSACTIONS"
-              value={String(wStats?.totalTransactions ?? 0)}
-              sub={periodLabel}
-            />
-            <StatCard
-              label="TOTAL NET WEIGHT"
-              value={fmtWeight(wStats?.totalNetWeight ?? 0)}
-              sub={`avg ${fmtWeight(wStats?.avgNetWeight ?? 0)} / truck`}
-            />
-            <StatCard
-              label="AVG. TRANSACTION TIME"
-              value={fmtMinutes(wStats?.avgTransactionMinutes ?? 0)}
-              sub="entry to exit"
-            />
-            <StatCard
-              label="PEAK HOUR"
-              value={wStats?.peakHour ?? '—'}
-              sub={`${wStats?.editedCount ?? 0} operator-edited entries`}
-            />
-          </>
-        )}
-      </div>
-
-      {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
-        <ChartCard title="TRANSACTIONS OVER TIME">
-          {loading
-            ? <Skel h={120} />
-            : <BarChart data={wTrendTx} color="#2563EB" height={120} labelEvery={labelEvery} />
-          }
-        </ChartCard>
-        <ChartCard title="NET WEIGHT OVER TIME (KG)">
-          {loading
-            ? <Skel h={120} />
-            : <BarChart data={wTrendWt} color="#0891B2" height={120} labelEvery={labelEvery} />
-          }
-        </ChartCard>
-      </div>
-
-      {/* Operator table + status donut */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, marginBottom: 40 }}>
-        <ChartCard title="TOP OPERATORS BY TRANSACTIONS">
-          {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[1,2,3].map(i => <Skel key={i} h={28} />)}
-            </div>
-          ) : wStats?.topOperators.length === 0 ? (
-            <div style={{ color: '#94A3B8', fontSize: 13 }}>No data for this period</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {wStats!.topOperators.map((op, i) => {
-                const pct = Math.round((op.count / (wStats!.topOperators[0]?.count || 1)) * 100)
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ fontSize: 12, color: '#475569', width: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'DM Sans, sans-serif' }}>
-                      {op.name}
-                    </div>
-                    <div style={{ flex: 1, height: 8, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: '#2563EB', borderRadius: 4, opacity: 0.8 }} />
-                    </div>
-                    <div style={{ fontSize: 12, color: '#0F172A', fontWeight: 600, width: 28, textAlign: 'right', fontFamily: 'DM Mono, monospace' }}>
-                      {op.count}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </ChartCard>
-
-        <ChartCard title="STATUS BREAKDOWN" style={{ minWidth: 200 }}>
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center' }}><Skel w={100} h={100} r={50} /></div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <DonutChart
-                size={90}
-                segments={(wStats?.statusBreakdown ?? []).map(s => ({
-                  value: s.count,
-                  label: s.status,
-                  color: s.status === 'complete' ? '#059669' : s.status === 'waiting' ? '#F59E0B' : '#6B7280',
-                }))}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                {(wStats?.statusBreakdown ?? []).map((s, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{
-                        width: 8, height: 8, borderRadius: 2, flexShrink: 0,
-                        background: s.status === 'complete' ? '#059669' : s.status === 'waiting' ? '#F59E0B' : '#6B7280',
-                      }} />
-                      <span style={{ fontSize: 11, color: '#475569', textTransform: 'capitalize', fontFamily: 'DM Sans, sans-serif' }}>{s.status}</span>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', fontFamily: 'DM Mono, monospace' }}>{s.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </ChartCard>
-      </div>
-
-      {/* ══════════════════════════════════════════
-          ALERTS SECTION
-      ══════════════════════════════════════════ */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <div style={{ width: 3, height: 20, background: '#EF4444', borderRadius: 2, flexShrink: 0 }} />
-        <SectionHeader
-          title="Security Alerts"
-          sub={`Alert system performance — ${periodLabel}`}
-        />
-      </div>
-
-      {/* Alert stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
-        {loading ? (
-          [1,2,3,4].map(i => (
-            <Card key={i}>
-              <Skel w="60%" h={10} />
-              <div style={{ marginTop: 10 }}><Skel w="40%" h={28} /></div>
-              <div style={{ marginTop: 8 }}><Skel w="70%" h={10} /></div>
-            </Card>
-          ))
-        ) : (
-          <>
-            <StatCard
-              label="TOTAL ALERTS"
-              value={String(aStats?.totalAlerts ?? 0)}
-              sub={periodLabel}
-            />
-            <StatCard
-              label="UNRESOLVED"
-              value={String(aStats?.unresolvedCount ?? 0)}
-              sub={`${resolutionRate}% resolution rate`}
-              accent={aStats && aStats.unresolvedCount > 0 ? '#EF4444' : undefined}
-            />
-            <StatCard
-              label="RESOLVED"
-              value={String(aStats?.resolvedCount ?? 0)}
-              sub={`${resolutionRate}% of all alerts`}
-              accent="#059669"
-            />
-            <StatCard
-              label="AVG. RESOLUTION TIME"
-              value={fmtMinutes(aStats?.avgResolutionMinutes ?? 0)}
-              sub="from trigger to resolved"
-            />
-          </>
-        )}
-      </div>
-
-      {/* Alert trend chart + severity donut */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, marginBottom: 20 }}>
-        <ChartCard title="ALERTS OVER TIME  ·  ■ UNRESOLVED  ■ RESOLVED">
-          {loading
-            ? <Skel h={120} />
-            : <>
-                <StackedBarChart data={aStats?.dailyTrend ?? []} height={120} labelEvery={labelEvery} />
-                <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                    <div style={{ width: 10, height: 10, background: '#EF4444', borderRadius: 2, opacity: 0.8 }} /> Unresolved
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                    <div style={{ width: 10, height: 10, background: '#10B981', borderRadius: 2, opacity: 0.8 }} /> Resolved
-                  </div>
-                </div>
-              </>
-          }
-        </ChartCard>
-
-        <ChartCard title="BY SEVERITY" style={{ minWidth: 200 }}>
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center' }}><Skel w={100} h={100} r={50} /></div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <DonutChart
-                size={90}
-                segments={(aStats?.bySeverity ?? []).map(s => ({
-                  value: s.count,
-                  label: s.severity,
-                  color: severity_color(s.severity),
-                }))}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                {(aStats?.bySeverity ?? []).map((s, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 2, background: severity_color(s.severity) }} />
-                      <span style={{ fontSize: 11, color: '#475569', textTransform: 'capitalize', fontFamily: 'DM Sans, sans-serif' }}>{s.severity}</span>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', fontFamily: 'DM Mono, monospace' }}>{s.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </ChartCard>
-      </div>
-
-      {/* Event type + detector + top cameras */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-
-        {/* By event type */}
-        <ChartCard title="BY EVENT TYPE">
-          {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[1,2,3,4].map(i => <Skel key={i} h={22} />)}
-            </div>
-          ) : (aStats?.byEventType.length ?? 0) === 0 ? (
-            <div style={{ color: '#94A3B8', fontSize: 13 }}>No alerts this period</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {aStats!.byEventType.map((e, i) => {
-                const pct = Math.round((e.count / (aStats!.totalAlerts || 1)) * 100)
-                return (
-                  <div key={i}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: '#475569', fontFamily: 'DM Sans, sans-serif', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {e.event_type.replace(/_/g, ' ')}
-                      </span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', fontFamily: 'DM Mono, monospace' }}>{e.count}</span>
-                    </div>
-                    <div style={{ height: 5, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: '#F59E0B', borderRadius: 3 }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </ChartCard>
-
-        {/* By detector */}
-        <ChartCard title="BY DETECTOR">
-          {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[1,2,3].map(i => <Skel key={i} h={22} />)}
-            </div>
-          ) : (aStats?.byDetector.length ?? 0) === 0 ? (
-            <div style={{ color: '#94A3B8', fontSize: 13 }}>No alerts this period</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {aStats!.byDetector.map((d, i) => {
-                const pct = Math.round((d.count / (aStats!.byDetector[0]?.count || 1)) * 100)
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 6,
-                      background: '#F8FAFF', border: '1px solid #E2E8F0',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 11, color: '#475569', fontFamily: 'DM Sans, sans-serif', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {d.detector}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#0F172A' }}>{d.count}</span>
-                      </div>
-                      <div style={{ height: 4, background: '#F1F5F9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: '#7C3AED', borderRadius: 2 }} />
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </ChartCard>
-
-        {/* Top cameras */}
-        <ChartCard title="TOP CAMERAS BY ALERTS">
-          {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[1,2,3].map(i => <Skel key={i} h={28} />)}
-            </div>
-          ) : (aStats?.topCameras.length ?? 0) === 0 ? (
-            <div style={{ color: '#94A3B8', fontSize: 13 }}>No camera data this period</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {aStats!.topCameras.map((c, i) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 10px', borderRadius: 7,
-                  background: i === 0 ? '#FEF2F2' : '#F8F9FA',
-                  border: `1px solid ${i === 0 ? '#FECACA' : '#E2E8F0'}`,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontSize: 10, fontWeight: 800, color: i === 0 ? '#EF4444' : '#94A3B8',
-                      fontFamily: 'DM Mono, monospace',
-                    }}>
-                      #{i + 1}
-                    </span>
-                    <span style={{ fontSize: 12, color: '#475569', fontFamily: 'DM Sans, sans-serif' }}>
-                      {c.camera_id}
-                    </span>
-                  </div>
-                  <span style={{
-                    fontSize: 12, fontWeight: 700, color: i === 0 ? '#EF4444' : '#0F172A',
-                    fontFamily: 'DM Mono, monospace',
-                  }}>
-                    {c.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </ChartCard>
-
-      </div>
-
+    <>
+      {/* ── Responsive styles ─────────────────────────────── */}
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        /* Page padding */
+        .rp-page {
+          padding: 32px 36px 64px;
+        }
+        @media (max-width: 767px) {
+          .rp-page { padding: 20px 16px 48px; }
+        }
+
+        /* Page header: stack on mobile */
+        .rp-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 32px;
+          gap: 16px;
+        }
+        @media (max-width: 599px) {
+          .rp-header {
+            flex-direction: column;
+            align-items: stretch;
+            margin-bottom: 24px;
+          }
+        }
+
+        /* Stat cards: 2-col on mobile, 4-col on desktop */
+        .rp-stat-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 14px;
+          margin-bottom: 20px;
+        }
+        @media (max-width: 1023px) {
+          .rp-stat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 479px) {
+          .rp-stat-grid { grid-template-columns: 1fr; gap: 10px; }
+        }
+
+        /* Charts row: 2-col on desktop, 1-col on mobile */
+        .rp-charts-2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          margin-bottom: 20px;
+        }
+        @media (max-width: 767px) {
+          .rp-charts-2col { grid-template-columns: 1fr; }
+        }
+
+        /* Operator + donut row */
+        .rp-op-row {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 14px;
+          margin-bottom: 40px;
+        }
+        @media (max-width: 767px) {
+          .rp-op-row {
+            grid-template-columns: 1fr;
+          }
+          /* On mobile, donut card sits inline — remove min-width constraint */
+          .rp-donut-card {
+            min-width: unset !important;
+          }
+        }
+
+        /* Alert trend + severity donut */
+        .rp-alert-trend-row {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 14px;
+          margin-bottom: 20px;
+        }
+        @media (max-width: 767px) {
+          .rp-alert-trend-row {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Bottom 3-col grid */
+        .rp-bottom-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 14px;
+        }
+        @media (max-width: 1023px) {
+          .rp-bottom-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 599px) {
+          .rp-bottom-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Section header row */
+        .rp-section-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+
+        /* Period selector: full width on very small screens */
+        @media (max-width: 599px) {
+          .rp-period-selector {
+            width: 100%;
+            display: flex !important;
+          }
+          .rp-period-selector button {
+            flex: 1;
+          }
+        }
       `}</style>
-    </div>
+
+      <div className="rp-page" style={{
+        flex: 1, overflowY: 'auto', background: '#F8F9FA',
+        fontFamily: 'DM Sans, sans-serif',
+      }}>
+
+        {/* ── Page header ── */}
+        <div className="rp-header">
+          <div>
+            <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>
+              Reports & Analytics
+            </h1>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+              Operational insights across weighbridge and security systems
+            </p>
+          </div>
+          <div className="rp-period-selector" style={{ display: 'inline-flex', background: '#F1F5F9', borderRadius: 8, padding: 3, gap: 2, flexShrink: 0 }}>
+            {(['daily','weekly','monthly'] as Period[]).map(p => (
+              <button key={p} onClick={() => setPeriod(p)} style={{
+                padding: '6px 16px', borderRadius: 6, border: 'none',
+                background: period === p ? 'white' : 'transparent',
+                boxShadow: period === p ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                color: period === p ? '#0F172A' : '#64748B',
+                fontSize: 12, fontWeight: period === p ? 700 : 500,
+                cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+                transition: 'all 0.15s', textTransform: 'capitalize',
+              }}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Error ── */}
+        {error && (
+          <div style={{
+            background: '#FEF2F2', border: '1px solid #FECACA',
+            borderRadius: 8, padding: '12px 16px', marginBottom: 24,
+            fontSize: 13, color: '#DC2626',
+          }}>
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+
+        {/* ══ WEIGHBRIDGE SECTION ══ */}
+        <div className="rp-section-row">
+          <div style={{ width: 3, height: 20, background: '#2563EB', borderRadius: 2, flexShrink: 0 }} />
+          <SectionHeader
+            title="Weighbridge"
+            sub={`Weight scale performance — ${periodLabel}`}
+          />
+        </div>
+
+        {/* Stat cards */}
+        <div className="rp-stat-grid">
+          {loading ? (
+            [1,2,3,4].map(i => (
+              <Card key={i}>
+                <Skel w="60%" h={10} />
+                <div style={{ marginTop: 10 }}><Skel w="40%" h={28} /></div>
+                <div style={{ marginTop: 8 }}><Skel w="70%" h={10} /></div>
+              </Card>
+            ))
+          ) : (
+            <>
+              <StatCard label="TOTAL TRANSACTIONS" value={String(wStats?.totalTransactions ?? 0)} sub={periodLabel} />
+              <StatCard label="TOTAL NET WEIGHT" value={fmtWeight(wStats?.totalNetWeight ?? 0)} sub={`avg ${fmtWeight(wStats?.avgNetWeight ?? 0)} / truck`} />
+              <StatCard label="AVG. TRANSACTION TIME" value={fmtMinutes(wStats?.avgTransactionMinutes ?? 0)} sub="entry to exit" />
+              <StatCard label="PEAK HOUR" value={wStats?.peakHour ?? '—'} sub={`${wStats?.editedCount ?? 0} operator-edited entries`} />
+            </>
+          )}
+        </div>
+
+        {/* Charts row */}
+        <div className="rp-charts-2col">
+          <ChartCard title="TRANSACTIONS OVER TIME">
+            {loading ? <Skel h={120} /> : <BarChart data={wTrendTx} color="#2563EB" height={120} labelEvery={labelEvery} />}
+          </ChartCard>
+          <ChartCard title="NET WEIGHT OVER TIME (KG)">
+            {loading ? <Skel h={120} /> : <BarChart data={wTrendWt} color="#0891B2" height={120} labelEvery={labelEvery} />}
+          </ChartCard>
+        </div>
+
+        {/* Operator table + status donut */}
+        <div className="rp-op-row">
+          <ChartCard title="TOP OPERATORS BY TRANSACTIONS">
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[1,2,3].map(i => <Skel key={i} h={28} />)}
+              </div>
+            ) : wStats?.topOperators.length === 0 ? (
+              <div style={{ color: '#94A3B8', fontSize: 13 }}>No data for this period</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {wStats!.topOperators.map((op, i) => {
+                  const pct = Math.round((op.count / (wStats!.topOperators[0]?.count || 1)) * 100)
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ fontSize: 12, color: '#475569', width: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'DM Sans, sans-serif' }}>
+                        {op.name}
+                      </div>
+                      <div style={{ flex: 1, height: 8, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: '#2563EB', borderRadius: 4, opacity: 0.8 }} />
+                      </div>
+                      <div style={{ fontSize: 12, color: '#0F172A', fontWeight: 600, width: 28, textAlign: 'right', fontFamily: 'DM Mono, monospace' }}>
+                        {op.count}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </ChartCard>
+
+          <ChartCard title="STATUS BREAKDOWN" style={{ minWidth: 200 }}>
+            {loading ? (
+              <div style={{ display: 'flex', justifyContent: 'center' }}><Skel w={100} h={100} r={50} /></div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <DonutChart
+                  size={90}
+                  segments={(wStats?.statusBreakdown ?? []).map(s => ({
+                    value: s.count,
+                    label: s.status,
+                    color: s.status === 'complete' ? '#059669' : s.status === 'waiting' ? '#F59E0B' : '#6B7280',
+                  }))}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  {(wStats?.statusBreakdown ?? []).map((s, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{
+                          width: 8, height: 8, borderRadius: 2, flexShrink: 0,
+                          background: s.status === 'complete' ? '#059669' : s.status === 'waiting' ? '#F59E0B' : '#6B7280',
+                        }} />
+                        <span style={{ fontSize: 11, color: '#475569', textTransform: 'capitalize', fontFamily: 'DM Sans, sans-serif' }}>{s.status}</span>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', fontFamily: 'DM Mono, monospace' }}>{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </ChartCard>
+        </div>
+
+        {/* ══ ALERTS SECTION ══ */}
+        <div className="rp-section-row">
+          <div style={{ width: 3, height: 20, background: '#EF4444', borderRadius: 2, flexShrink: 0 }} />
+          <SectionHeader
+            title="Security Alerts"
+            sub={`Alert system performance — ${periodLabel}`}
+          />
+        </div>
+
+        {/* Alert stat cards */}
+        <div className="rp-stat-grid">
+          {loading ? (
+            [1,2,3,4].map(i => (
+              <Card key={i}>
+                <Skel w="60%" h={10} />
+                <div style={{ marginTop: 10 }}><Skel w="40%" h={28} /></div>
+                <div style={{ marginTop: 8 }}><Skel w="70%" h={10} /></div>
+              </Card>
+            ))
+          ) : (
+            <>
+              <StatCard label="TOTAL ALERTS" value={String(aStats?.totalAlerts ?? 0)} sub={periodLabel} />
+              <StatCard label="UNRESOLVED" value={String(aStats?.unresolvedCount ?? 0)} sub={`${resolutionRate}% resolution rate`} accent={aStats && aStats.unresolvedCount > 0 ? '#EF4444' : undefined} />
+              <StatCard label="RESOLVED" value={String(aStats?.resolvedCount ?? 0)} sub={`${resolutionRate}% of all alerts`} accent="#059669" />
+              <StatCard label="AVG. RESOLUTION TIME" value={fmtMinutes(aStats?.avgResolutionMinutes ?? 0)} sub="from trigger to resolved" />
+            </>
+          )}
+        </div>
+
+        {/* Alert trend + severity donut */}
+        <div className="rp-alert-trend-row">
+          <ChartCard title="ALERTS OVER TIME  ·  ■ UNRESOLVED  ■ RESOLVED">
+            {loading
+              ? <Skel h={120} />
+              : <>
+                  <StackedBarChart data={aStats?.dailyTrend ?? []} height={120} labelEvery={labelEvery} />
+                  <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                      <div style={{ width: 10, height: 10, background: '#EF4444', borderRadius: 2, opacity: 0.8 }} /> Unresolved
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                      <div style={{ width: 10, height: 10, background: '#10B981', borderRadius: 2, opacity: 0.8 }} /> Resolved
+                    </div>
+                  </div>
+                </>
+            }
+          </ChartCard>
+
+          <ChartCard title="BY SEVERITY" style={{ minWidth: 200 }}>
+            {loading ? (
+              <div style={{ display: 'flex', justifyContent: 'center' }}><Skel w={100} h={100} r={50} /></div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <DonutChart
+                  size={90}
+                  segments={(aStats?.bySeverity ?? []).map(s => ({
+                    value: s.count,
+                    label: s.severity,
+                    color: severity_color(s.severity),
+                  }))}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  {(aStats?.bySeverity ?? []).map((s, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 2, background: severity_color(s.severity) }} />
+                        <span style={{ fontSize: 11, color: '#475569', textTransform: 'capitalize', fontFamily: 'DM Sans, sans-serif' }}>{s.severity}</span>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', fontFamily: 'DM Mono, monospace' }}>{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </ChartCard>
+        </div>
+
+        {/* Bottom 3-col grid */}
+        <div className="rp-bottom-grid">
+
+          {/* By event type */}
+          <ChartCard title="BY EVENT TYPE">
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1,2,3,4].map(i => <Skel key={i} h={22} />)}
+              </div>
+            ) : (aStats?.byEventType.length ?? 0) === 0 ? (
+              <div style={{ color: '#94A3B8', fontSize: 13 }}>No alerts this period</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {aStats!.byEventType.map((e, i) => {
+                  const pct = Math.round((e.count / (aStats!.totalAlerts || 1)) * 100)
+                  return (
+                    <div key={i}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: '#475569', fontFamily: 'DM Sans, sans-serif', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {e.event_type.replace(/_/g, ' ')}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', fontFamily: 'DM Mono, monospace' }}>{e.count}</span>
+                      </div>
+                      <div style={{ height: 5, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: '#F59E0B', borderRadius: 3 }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </ChartCard>
+
+          {/* By detector */}
+          <ChartCard title="BY DETECTOR">
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1,2,3].map(i => <Skel key={i} h={22} />)}
+              </div>
+            ) : (aStats?.byDetector.length ?? 0) === 0 ? (
+              <div style={{ color: '#94A3B8', fontSize: 13 }}>No alerts this period</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {aStats!.byDetector.map((d, i) => {
+                  const pct = Math.round((d.count / (aStats!.byDetector[0]?.count || 1)) * 100)
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 6,
+                        background: '#F8FAFF', border: '1px solid #E2E8F0',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 11, color: '#475569', fontFamily: 'DM Sans, sans-serif', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {d.detector}
+                          </span>
+                          <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#0F172A' }}>{d.count}</span>
+                        </div>
+                        <div style={{ height: 4, background: '#F1F5F9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: '#7C3AED', borderRadius: 2 }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </ChartCard>
+
+          {/* Top cameras */}
+          <ChartCard title="TOP CAMERAS BY ALERTS">
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[1,2,3].map(i => <Skel key={i} h={28} />)}
+              </div>
+            ) : (aStats?.topCameras.length ?? 0) === 0 ? (
+              <div style={{ color: '#94A3B8', fontSize: 13 }}>No camera data this period</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {aStats!.topCameras.map((c, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 10px', borderRadius: 7,
+                    background: i === 0 ? '#FEF2F2' : '#F8F9FA',
+                    border: `1px solid ${i === 0 ? '#FECACA' : '#E2E8F0'}`,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: i === 0 ? '#EF4444' : '#94A3B8', fontFamily: 'DM Mono, monospace' }}>
+                        #{i + 1}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#475569', fontFamily: 'DM Sans, sans-serif' }}>{c.camera_id}</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? '#EF4444' : '#0F172A', fontFamily: 'DM Mono, monospace' }}>
+                      {c.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ChartCard>
+
+        </div>
+      </div>
+    </>
   )
 }

@@ -78,115 +78,42 @@ export default function ResetPasswordPage() {
   //     Tokens extracted directly from hash
   //
   // We handle both here.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const supabase   = getClient()
-    const searchParams = new URLSearchParams(window.location.search)
-    const hashParams   = new URLSearchParams(window.location.hash.substring(1))
-
-    const code = searchParams.get('code')
-    const at   = hashParams.get('access_token')
-    const rt   = hashParams.get('refresh_token')
-    const type = hashParams.get('type')
-
-    // ── PKCE flow: ?code= ─────────────────────────────────────────────────
-    if (code) {
-      // Exchange the one-time code for a session.
-      // After this call, supabase.auth has an active session automatically.
-      supabase.auth.exchangeCodeForSession(code)
-        .then(({ error: exchErr }) => {
-          if (exchErr) {
-            setError(
-              'This reset link has expired or already been used. ' +
-              'Please request a new password reset.'
-            )
-            setStep('error')
-            return
-          }
-          // Clean the code from URL so refresh doesn't re-use it
-          window.history.replaceState(null, '', window.location.pathname)
-          setUsePkce(true)
-          setStep('reset_form')
-        })
+ useEffect(() => {
+  const supabase = getClient()
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!session) {
+      setError('No valid session. Please request a new reset link.')
+      setStep('error')
       return
     }
-
-    // ── Hash / implicit flow: #access_token= ─────────────────────────────
-    if (at && rt && (type === 'recovery' || type === 'invite')) {
-      window.history.replaceState(null, '', window.location.pathname)
-      setRawAt(at)
-      setRawRt(rt)
-      setStep('reset_form')
-      return
-    }
-
-    // ── Nothing found ─────────────────────────────────────────────────────
-    setError(
-      'This reset link is invalid or has already been used. ' +
-      'Please request a new one from the login page.'
-    )
-    setStep('error')
-  }, [])
+    setStep('reset_form')
+  })
+}, [])
 
   // ── Submit new password ───────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (password.length < 8)  { setError('Password must be at least 8 characters'); return }
-    if (strength.score < 2)   { setError('Password is too weak — add uppercase letters or numbers'); return }
-    if (password !== confirm)  { setError('Passwords do not match'); return }
+  if (password.length < 8)  { setError('Password must be at least 8 characters'); return }
+  if (strength.score < 2)   { setError('Password is too weak — add uppercase letters or numbers'); return }
+  if (password !== confirm)  { setError('Passwords do not match'); return }
 
-    setError(null)
-    setStep('submitting')
+  setError(null)
+  setStep('submitting')
 
-    try {
-      const supabase = getClient()
-
-      if (usePkce) {
-        // PKCE flow: session is already active from exchangeCodeForSession()
-        // — just call updateUser directly
-        const { error: updateErr } = await supabase.auth.updateUser({ password })
-        if (updateErr) {
-          setError(`Could not update password: ${updateErr.message}`)
-          setStep('reset_form')
-          return
-        }
-
-      } else {
-        // Hash / implicit flow: exchange stored tokens first
-        if (!rawAt || !rawRt) {
-          setError('Session tokens missing — please use the link from your email again.')
-          setStep('reset_form')
-          return
-        }
-
-        const { data: { session }, error: sessErr } =
-          await supabase.auth.setSession({
-            access_token:  rawAt,
-            refresh_token: rawRt,
-          })
-
-        if (sessErr || !session) {
-          setError('Your reset link has expired. Please request a new password reset.')
-          setStep('reset_form')
-          return
-        }
-
-        const { error: updateErr } = await supabase.auth.updateUser({ password })
-        if (updateErr) {
-          setError(`Could not update password: ${updateErr.message}`)
-          setStep('reset_form')
-          return
-        }
-      }
-
-      setStep('done')
-      setTimeout(() => router.replace('/login'), 2000)
-
-    } catch (e: any) {
-      setError(e?.message ?? 'Network error — please try again')
+  try {
+    const supabase = getClient()
+    const { error: updateErr } = await supabase.auth.updateUser({ password })
+    if (updateErr) {
+      setError(`Could not update password: ${updateErr.message}`)
       setStep('reset_form')
+      return
     }
+    setStep('done')
+    setTimeout(() => router.replace('/login'), 2000)
+  } catch (e: any) {
+    setError(e?.message ?? 'Network error — please try again')
+    setStep('reset_form')
   }
+}
 
   return (
     <div style={{

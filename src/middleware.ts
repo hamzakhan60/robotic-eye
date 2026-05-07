@@ -1,11 +1,17 @@
 // src/middleware.ts
-// Protects all routes — redirects unauthenticated users to login
-// Redirects based on role: operator → /dashboard, admin → /overview
-
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // ── Skip middleware entirely for auth callbacks ──────────────
+  // PKCE ?code= must reach the page component untouched.
+  // getUser() in middleware can consume/invalidate the code.
+  if (pathname.startsWith('/auth/') || pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -26,15 +32,10 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname
 
-  // ── Public routes — no auth needed, pass straight through ──
-  if (
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/auth/')
-  ) {
-    if (pathname.startsWith('/login') && user) {
-      // Already logged in — check is_active before redirecting
+  // ── Public routes ────────────────────────────────────────────
+  if (pathname.startsWith('/login')) {
+    if (user) {
       const { data: op } = await supabase
         .from('operators')
         .select('role, is_active')
@@ -42,12 +43,10 @@ export async function middleware(request: NextRequest) {
         .single()
 
       if (!op || !op.is_active) {
-        // Deactivated — force sign out and show error on login page
         await supabase.auth.signOut()
         const url = new URL('/login', request.url)
         url.searchParams.set('error', 'deactivated')
         const res = NextResponse.redirect(url)
-        // Clear all auth cookies so the signOut sticks
         request.cookies.getAll().forEach(c => res.cookies.delete(c.name))
         return res
       }
@@ -58,7 +57,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // ── Root — redirect based on role ──────────────────────────
+  // ── Root ─────────────────────────────────────────────────────
   if (pathname === '/') {
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
@@ -82,15 +81,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(dest, request.url))
   }
 
-  // ── Protected routes — must be logged in ───────────────────
+  // ── Protected routes ─────────────────────────────────────────
   if (!user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // ── is_active check on every protected request ──────────────
-  // Even if the user has a valid JWT session, if an admin has
-  // deactivated them the DB will show is_active = false and they
-  // get signed out on their very next page navigation.
   const { data: op } = await supabase
     .from('operators')
     .select('role, is_active')
@@ -106,8 +101,6 @@ export async function middleware(request: NextRequest) {
     return res
   }
 
-  // ── Role protection ─────────────────────────────────────────
-  // Use DB role (op.role) — more reliable than user_metadata
   const role = op.role ?? 'operator'
 
   const isAdminRoute = (
